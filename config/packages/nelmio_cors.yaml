@@ -1,0 +1,14 @@
+nelmio_cors:
+    defaults:
+        allow_origin: ['*'] # URL du frontend
+        allow_credentials: true # Nécessaire pour les cookies et les credentials
+        allow_headers: ['Content-Type', 'Authorization', 'X-Requested-With'] # En-têtes autorisés
+        expose_headers: ['Authorization', 'Content-Length'] # Exposez les en-têtes nécessaires si besoin
+        allow_methods: ['POST', 'GET', 'PUT', 'DELETE', 'OPTIONS'] # Méthodes autorisées
+        max_age: 3600 # Durée de mise en cache des pré-requêtes
+    paths:
+        '^/api/':
+            allow_origin: ['*']
+            allow_headers: ['*']
+            allow_methods: ['POST', 'PUT', 'GET', 'DELETE']
+            max_age: 3600

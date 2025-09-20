@@ -1,0 +1,5 @@
+framework:
+    default_locale: 'fr' # Langue par défaut
+    translator:
+        default_path: '%kernel.project_dir%/translations' # Chemin vers les fichiers de traduction
+        fallbacks: ['fr'] 

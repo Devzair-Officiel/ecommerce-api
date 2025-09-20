@@ -1,0 +1,13 @@
+user:
+  email:
+    not_blank: "Le champ email est obligatoire."
+    invalid: "Le format de l'email est invalide."
+  password:
+    not_blank: "Le mot de passe est obligatoire."
+    min_length: "Le mot de passe doit contenir au moins {{ limit }} caractères."
+  firstname:
+    not_blank: "Le prénom est obligatoire."
+    min_length: "Le prénom doit contenir au moins {{ limit }} caractères."
+  lastname:
+    not_blank: "Le prénom est obligatoire."
+    min_length: "Le prénom doit contenir au moins {{ limit }} caractères."

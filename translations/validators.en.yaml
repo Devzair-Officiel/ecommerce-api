@@ -1,0 +1,14 @@
+user:
+  email:
+    not_blank: "The email field is required."
+    invalid: "Please provide a valid email address."
+  password:
+    not_blank: "Password is required."
+    min_length: "The password must contain at least {{ limit }} characters."
+  firstname:
+    not_blank: "The firstname is required."
+    min_length: "The firstname must contain at least {{ limit }} characters."
+  lastname:
+    not_blank: "The firstname is required."
+    min_length: "The firstname must contain at least {{ limit }} characters."
+

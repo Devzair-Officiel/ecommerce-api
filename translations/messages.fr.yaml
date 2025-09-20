@@ -1,0 +1,51 @@
+entity_name:
+  user: "Utilisateur"
+
+# Messages Génériques
+entity:
+  not_found: "%entity% non trouvé."
+  created: "%entity% créé avec succès."
+  updated: "%entity% mis à jour avec succès."
+  delete: "%entity% supprimé avec succès."
+  retrieved: "%entity% récupéré avec succès."
+  list_retrieved: "%entity% récupérés avec succès."
+  deletion_prohibited: "Impossible de supprimer la ressource %entity% car des %related_entity% y sont encore rattachés."
+
+# Messages liés aux utilisateurs
+user:
+  desactivated: "Utilisateur désactivé avec succès."
+  activated: "Utilisateur activé avec succès."
+  already_deactivated: "L'utilisateur est déjà désactivé."
+  already_activated: "L'utilisateur est déjà activé."
+
+# Message lié à l'authentification
+token:
+  expired: "Votre session a expiré. Veuillez vous reconnecter."
+  invalid: "La session est invalide. Veuillez vérifier vos informations d'authentification."
+  missing: "Le jeton d'authentification est manquant."
+  error: "Une erreur est survenue avec votre jeton d'authentification."
+  failed: "Identifiant incorrect"
+
+# Messages de validation
+validation:
+  email_taken: "Cet email est déjà pris."
+  json_invalid: "Format JSON invalide."
+  failed: "La validation a échoué pour le champ '%field%'."
+  invalid_key: "La clé '%key%' n'est pas valide"
+  not_blank: "Ce champ ne doit pas être vide."
+
+# Messages liés à la pagination
+pagination:
+  invalid_page: "Le numéro de page demandé (%page%) est invalide."
+  invalid_limit: "La limite spécifiée (%value%) est invalide."
+  limit_exceeded: "La limite d'éléments par page ne peut pas dépasser %limit%."
+
+error:
+  ### Messages d'erreur génériques ###
+  invalid_request: "Requête invalide."
+  server_error: "Une erreur inattendue s'est produite."
+  Validation_failed: "Échec de la validation."
+  no_file: "Pas de fichier sélectionné"
+        ######################
+  invalid:
+    session_check_type: "Le type de vérification de session est invalide. Utilisez ?type=active ou ?type=online."

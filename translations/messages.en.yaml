@@ -1,0 +1,51 @@
+entity_name:
+  user: "User"
+
+# Messages Générique
+entity:
+  not_found: "%entity% not found."
+  created: "%entity% registered successfully."
+  updated: "%entity% updated successfully."
+  delete: "%entity% deleted successfully."
+  retrieved: "%entity% retrieved successfully."
+  list_retrieved: "%entity% retrieved successfully."
+  deletion_prohibited: "Impossible to remove the %entity% resource because %related_entity% are still attached to it."
+
+# Messages liés aux utilisateurs
+user:
+  desactivated: "User deactivated successfully."
+  activated: "User activated successfully."
+  already_deactivated: "User is already deactivated."
+  already_activated: "User is already activated."
+
+
+# Message lié à l'authentification
+token:
+  expired: "Your session has expired. Please log in again."
+  invalid: "The session is invalid. Please check your authentication information."
+  missing: "The authentication token is missing."
+  error: "An error occurred with your authentication token."
+  failed: "Invalid identifier"
+
+# Messages de validation
+validation:
+  email_taken: "This email is already taken."
+  json_invalid: "Invalid JSON format."
+  failed: "Validation failed for the field '%field%'."
+  invalid_key: "The key '%key%' is not valid"
+  not_blank: "This field must not be empty."
+
+# Messages liés à la pagination
+pagination:
+  invalid_page: "The requested page number (%page%) is invalid."
+  invalid_limit: "The specified limit (%value%) is invalid."
+  limit_exceeded: "The limit of items per page cannot exceed %limit%."
+
+# Messages d'erreur génériques
+error:
+  invalid_request: "Invalid request."
+  server_error: "An unexpected error occurred."
+  Validation_failed: "Validation failed."
+  no_file: "Not file select"
+  invalid:
+    session_check_type: "The session verification type is invalid. Use ?type=active ou ?type=online."
