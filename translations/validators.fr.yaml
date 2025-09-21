@@ -1,13 +1,100 @@
-user:
-  email:
-    not_blank: "Le champ email est obligatoire."
-    invalid: "Le format de l'email est invalide."
-  password:
-    not_blank: "Le mot de passe est obligatoire."
-    min_length: "Le mot de passe doit contenir au moins {{ limit }} caractères."
-  firstname:
-    not_blank: "Le prénom est obligatoire."
-    min_length: "Le prénom doit contenir au moins {{ limit }} caractères."
-  lastname:
-    not_blank: "Le prénom est obligatoire."
-    min_length: "Le prénom doit contenir au moins {{ limit }} caractères."
+validation:
+   business_rule:
+      default: "Règle métier violée"
+
+   product:
+      site:
+         required: "Le site est obligatoire"
+      name:
+         required: "Le nom du produit est obligatoire"
+         max_length: "Le nom ne peut pas dépasser {{ limit }} caractères"
+      slug:
+         required: "Le slug est obligatoire"
+         format: "Le slug ne peut contenir que des lettres minuscules, chiffres et tirets"
+      short_description:
+         max_length: "La description courte ne peut pas dépasser {{ limit }} caractères"
+      sku:
+         max_length: "Le SKU ne peut pas dépasser {{ limit }} caractères"
+      price:
+         required: "Le prix est obligatoire"
+         positive: "Le prix doit être positif ou nul"
+         negative: "Le prix ne peut pas être négatif"
+      original_price:
+         positive: "Le prix original doit être positif ou nul"
+         negative: "Le prix original ne peut pas être négatif"
+         must_be_higher: "Le prix original doit être supérieur au prix actuel ({{ current_price }}€)"
+         required_for_featured: "Un prix original est requis pour les produits mis en avant"
+      stock:
+         positive: "Le stock doit être positif ou nul"
+         negative: "Le stock ne peut pas être négatif"
+         insufficient: "Stock insuffisant"
+         below_minimum: "Le stock ne peut pas être inférieur au stock minimum ({{ min_stock }})"
+         should_be_zero_with_variants: "Le stock principal doit être à zéro quand le produit a des variantes"
+      min_stock:
+         positive: "Le stock minimum doit être positif ou nul"
+         negative: "Le stock minimum ne peut pas être négatif"
+      weight:
+         positive: "Le poids doit être positif ou nul"
+         negative: "Le poids ne peut pas être négatif"
+      images:
+         main_image_required: "Au moins une image principale est requise" 
+
+   address:
+      user:
+         required: "L'utilisateur est obligatoire"
+      type:
+         required: "Le type d'adresse est obligatoire"
+         invalid: "Le type d'adresse doit être 'billing' ou 'shipping'"
+         invalid_value: "Type d'adresse invalide"
+      company:
+         max_length: "Le nom de l'entreprise ne peut pas dépasser {{ limit }} caractères"
+      first_name:
+         required: "Le prénom est obligatoire"
+         max_length: "Le prénom ne peut pas dépasser {{ limit }} caractères"
+      last_name:
+         required: "Le nom de famille est obligatoire"
+         max_length: "Le nom de famille ne peut pas dépasser {{ limit }} caractères"
+      street:
+         required: "L'adresse est obligatoire"
+         max_length: "L'adresse ne peut pas dépasser {{ limit }} caractères"
+      street_complement:
+         max_length: "Le complément d'adresse ne peut pas dépasser {{ limit }} caractères"
+      zip_code:
+         required: "Le code postal est obligatoire"
+         max_length: "Le code postal ne peut pas dépasser {{ limit }} caractères"
+         format: "Le code postal n'est pas valide"
+      city:
+         required: "La ville est obligatoire"
+         max_length: "La ville ne peut pas dépasser {{ limit }} caractères"
+      state:
+         max_length: "La région ne peut pas dépasser {{ limit }} caractères"
+      country:
+         required: "Le pays est obligatoire"
+         invalid: "Le code pays n'est pas valide"
+      phone:
+         max_length: "Le téléphone ne peut pas dépasser {{ limit }} caractères"
+         format: "Le format du téléphone n'est pas valide"
+      notes:
+         max_length: "Les notes ne peuvent pas dépasser {{ limit }} caractères"
+
+   block:
+      theme:
+         required: "Le thème est obligatoire" # "Theme is required"
+      type:
+         required: "Le type de bloc est obligatoire" # "Block type is required"
+         invalid: "Type de bloc invalide" # "Invalid block type"
+         invalid_value: "Valeur de type invalide" # "Invalid type value"
+      name:
+         required: "Le nom du bloc est obligatoire" # "Block name is required"
+         max_length: "Le nom ne peut pas dépasser {{ limit }} caractères"
+      identifier:
+         required: "L'identifiant est obligatoire" # "Identifier is required"
+         max_length: "L'identifiant ne peut pas dépasser {{ limit }} caractères"
+         format: "L'identifiant ne peut contenir que des lettres, chiffres, _ et -"
+      position:
+         positive: "La position doit être positive" # "Position must be positive"
+         negative: "La position ne peut pas être négative" # "Position cannot be negative"
+      description:
+         max_length: "La description ne peut pas dépasser {{ limit }} caractères"
+      template:
+         max_length: "Le template ne peut pas dépasser {{ limit }} caractères"

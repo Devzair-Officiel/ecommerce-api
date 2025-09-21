@@ -11,20 +11,21 @@ use Symfony\Component\Serializer\Annotation\Context;
 trait DateTrait
 {
 
-    #[ORM\Column]
+    #[ORM\Column(type: 'datetime_immutable')]
     #[Context([DateTimeNormalizer::FORMAT_KEY => 'd/m/Y'])]
     #[Groups(['date'])]
-    private ?\DateTimeImmutable $created_at = null;
+    private ?\DateTimeImmutable $createdAt = null;
 
-    #[ORM\Column(nullable: true)]
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     #[Context([DateTimeNormalizer::FORMAT_KEY => 'd/m/Y'])]
     #[Groups(['date'])]
-    private ?\DateTimeImmutable $updated_at = null;
+    private ?\DateTimeImmutable $updatedAt = null;
 
-    #[ORM\Column(nullable: true)]
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     #[Context([DateTimeNormalizer::FORMAT_KEY => 'd/m/Y'])]
     #[Groups(['date'])]
-    private ?\DateTimeImmutable $closed_at = null;
+    private ?\DateTimeImmutable $closedAt = null;
+
 
     /**
      * Déclenché juste avant qu’une entité soit insérée en BDD
@@ -49,39 +50,38 @@ trait DateTrait
         $this->updatedAt = new \DateTimeImmutable();
     }
 
-
     public function getCreatedAt(): ?\DateTimeImmutable
     {
-        return $this->created_at;
+        return $this->createdAt;
     }
 
-    public function setCreatedAt(\DateTimeImmutable $created_at): static
+    public function setCreatedAt(\DateTimeImmutable $createdAt): static
     {
-        $this->created_at = $created_at;
+        $this->createdAt = $createdAt;
 
         return $this;
     }
 
     public function getUpdatedAt(): ?\DateTimeImmutable
     {
-        return $this->updated_at;
+        return $this->updatedAt;
     }
 
-    public function setUpdatedAt(?\DateTimeImmutable $updated_at): static
+    public function setUpdatedAt(?\DateTimeImmutable $updatedAt): static
     {
-        $this->updated_at = $updated_at;
+        $this->updatedAt = $updatedAt;
 
         return $this;
     }
 
     public function getClosedAt(): ?\DateTimeImmutable
     {
-        return $this->closed_at;
+        return $this->closedAt;
     }
 
-    public function setClosedAt(?\DateTimeImmutable $closed_at): static
+    public function setClosedAt(?\DateTimeImmutable $closedAt): static
     {
-        $this->closed_at = $closed_at;
+        $this->closedAt = $closedAt;
 
         return $this;
     }
