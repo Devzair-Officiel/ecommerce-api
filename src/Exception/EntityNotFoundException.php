@@ -1,34 +1,51 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Exception;
 
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-
 /**
- * Exception levée lorsqu'une entité n'est pas trouvée.
- * 
- * - Utilise une clé de traduction pour personnaliser le message d'erreur.
- * - Stocke les paramètres de traduction pour une meilleure internationalisation.
+ * Exception pour les entités non trouvées.
  */
-class EntityNotFoundException extends NotFoundHttpException
+class EntityNotFoundException extends AppException
 {
-    private array $translationParameters;
+    public function __construct(
+        private string $entityClass,
+        private array $criteria,
+        string $message = ''
+    ) {
+        $entityName = $this->getEntityName($entityClass);
+        $message = $message ?: "Entity '{$entityName}' not found";
 
-    /**
-     * @param string $entityKey Clé de traduction représentant l'entité non trouvée.
-     * @param array<string, mixed> $params Paramètres optionnels pour la traduction.
-     * @param \Throwable|null $previous Exception précédente, si applicable.
-     */
-    public function __construct(string $entityKey, array $params = [], ?\Throwable $previous = null)
-    {
-        $this->translationParameters = $params + ['%entity%' => $entityKey];
-        $message = 'entity.not_found'; // Clé de traduction par défaut
-
-        parent::__construct($message, $previous, 404);
+        parent::__construct($message, [
+            'entity' => $entityName,
+            'criteria' => $criteria
+        ]);
     }
 
-    public function getTranslationParameters(): array
+    public function getStatusCode(): int
     {
-        return $this->translationParameters;
+        return 404;
+    }
+
+    public function getMessageKey(): string
+    {
+        return 'entity.not_found';
+    }
+
+    public function getEntityClass(): string
+    {
+        return $this->entityClass;
+    }
+
+    public function getCriteria(): array
+    {
+        return $this->criteria;
+    }
+
+    private function getEntityName(string $entityClass): string
+    {
+        $parts = explode('\\', $entityClass);
+        return strtolower(end($parts));
     }
 }

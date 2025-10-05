@@ -4,55 +4,58 @@ declare(strict_types=1);
 
 namespace App\Utils;
 
-use App\Exception\ValidationException;
 use Symfony\Component\Validator\ConstraintViolationListInterface;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 /**
- * Utilitaire pour la validation des objets avec Symfony Validator.
+ * Utilitaire simplifié pour la validation.
  * 
- * - Valide un objet en appliquant ses contraintes de validation.
- * - Formate les erreurs de validation en tableau structuré.
+ * SIMPLIFICATION : Suppression de validateConstraint() qui fait doublon
+ * avec l'utilisation directe du ValidatorInterface.
+ * 
+ * Ne garde que le formatage des erreurs qui est utile pour l'API.
  */
 final class ValidationUtils
 {
-    public function __construct(private ValidatorInterface $validator) {}
-
     /**
-     * Formate les erreurs de validation en un tableau structuré.
+     * Formate les erreurs de validation en tableau structuré pour l'API.
      *
-     * @param ConstraintViolationListInterface $errors Liste des erreurs de validation.
-     *
-     * @return array Un tableau contenant les erreurs formatées.
+     * @param ConstraintViolationListInterface $errors Liste des erreurs de validation
+     * @return array Tableau des erreurs formatées
      */
     public static function formatValidationErrors(ConstraintViolationListInterface $errors): array
     {
-        return array_map(
-            static fn($violation) => [
-                'code' => 'validation_error', // Code d'erreur générique pour les violations
-                'message' => $violation->getMessage(), // Message d'erreur (ex : "This value should not be blank.")
-                'field' => $violation->getPropertyPath(), // Le champ concerné par l'erreur (ex : "email", "password")
-            ],
-            iterator_to_array($errors) // Convertit la liste en tableau pour pouvoir l'itérer
-        );
+        $formattedErrors = [];
+
+        foreach ($errors as $violation) {
+            $field = $violation->getPropertyPath() ?: 'general';
+
+            // Grouper les erreurs par champ
+            if (!isset($formattedErrors[$field])) {
+                $formattedErrors[$field] = [];
+            }
+
+            $formattedErrors[$field][] = [
+                'code' => 'validation_error',
+                'message' => $violation->getMessage(),
+                'invalid_value' => $violation->getInvalidValue()
+            ];
+        }
+
+        return $formattedErrors;
     }
 
     /**
-     * Valide les contraintes de validation sur un objet et lève une exception en cas d'erreur.
-     *
-     * @param object $data L'objet à valider.
-     *
-     * @throws ValidationException Si des erreurs de validation sont détectées.
+     * Formate les erreurs en structure plate pour compatibilité.
      */
-    public function validateConstraint(object $data): void
+    public static function formatValidationErrorsFlat(ConstraintViolationListInterface $errors): array
     {
-        $errors = $this->validator->validate($data);
-        if (count($errors) > 0) {
-            $formattedErrors = ValidationUtils::formatValidationErrors($errors);
-            throw new ValidationException(
-                $formattedErrors,
-                translationParameters: ['%field%' => $formattedErrors[0]['field']]
-            );
-        }
+        return array_map(
+            static fn($violation) => [
+                'code' => 'validation_error',
+                'message' => $violation->getMessage(),
+                'field' => $violation->getPropertyPath() ?: 'general',
+            ],
+            iterator_to_array($errors)
+        );
     }
 }

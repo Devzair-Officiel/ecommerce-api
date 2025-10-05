@@ -4,215 +4,302 @@ declare(strict_types=1);
 
 namespace App\EventSubscriber;
 
+use App\Exception\{
+    AppException,
+    ValidationException,
+    EntityNotFoundException,
+    BusinessRuleException,
+    ConflictException
+};
 use App\Utils\ApiResponseUtils;
-use App\Exception\PaginationException;
-use App\Exception\ValidationException;
-use App\Exception\EntityNotFoundException;
-use App\Exception\FileNotProvidedException;
-use Symfony\Component\HttpFoundation\Response;
-use App\Exception\EntityDeletionProhibitedException;
-use Symfony\Component\HttpKernel\Event\ExceptionEvent;
-use Symfony\Contracts\Translation\TranslatorInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpKernel\Event\ExceptionEvent;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Symfony\Component\HttpKernel\KernelEvents;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Symfony\Contracts\Translation\TranslatorInterface;
+
 
 /**
- * Subscriber pour gérer les exceptions API et normaliser les réponses d'erreur.
+ * Subscriber pour gérer automatiquement toutes les exceptions de l'API.
  * 
- * - Convertit certaines exceptions en réponses JSON standardisées.
- * - Traduit les messages d'erreur pour améliorer l'expérience utilisateur.
+ * Responsabilités :
+ * - Convertir les exceptions en réponses JSON standardisées
+ * - Logger les erreurs selon leur gravité
+ * - Gérer les exceptions Doctrine (contraintes uniques, etc.)
+ * - Formater les messages d'erreur pour l'utilisateur final
+ * 
+ * Avantages du Subscriber :
+ * - Auto-configuration (pas de YAML nécessaire)
+ * - Priorité définie dans le code
+ * - Maintenabilité (toute la logique au même endroit)
  */
 class ApiExceptionSubscriber implements EventSubscriberInterface
 {
     public function __construct(
-        private TranslatorInterface $translator,
-        private ApiResponseUtils $apiResponseUtils,
+        private readonly ApiResponseUtils $apiResponseUtils,
+        private readonly LoggerInterface $logger,
+        private readonly TranslatorInterface $translator
     ) {}
 
     /**
-     * Gère les exceptions et les transforme en réponses JSON.
-     *
-     * @param ExceptionEvent $event L'événement contenant l'exception levée.
+     * Configuration des événements écoutés.
+     * 
+     * Priorité 0 : exécuté après les listeners Symfony de sécurité
+     * mais avant les listeners de debug.
      */
-    public function onKernelException(ExceptionEvent $event): void
+    public static function getSubscribedEvents(): array
     {
-        $exception = $event->getThrowable();
-
-        ///////////    Gestion des erreurs de validation    //////////////
-        if ($exception instanceof ValidationException) {
-            $translateErrors = $this->translateValidationErrors($exception->getErrors());
-
-            $response = $this->apiResponseUtils->error(
-                errors: $translateErrors,
-                messageKey: $exception->getMessage(),
-                messageParams: $exception->getTranslationParameters(),
-                status: $exception->getStatusCode()
-            );
-
-            $event->setResponse($response);
-            return;
-        }
-
-        /////////    Gestion des erreurs de pagination    //////////////
-        if ($exception instanceof PaginationException) {
-            $response = $this->apiResponseUtils->error(
-                errors: [
-                    [
-                        'setting' => 'pagination',
-                        'message' => $this->translator->trans(
-                            $exception->getMessage(),
-                            $exception->getTranslationParameters()
-                        ),
-                    ],
-                ],
-                messageKey: $exception->getMessage(),
-                messageParams: $exception->getTranslationParameters(),
-                status: $exception->getStatusCode()
-            );
-
-            $event->setResponse($response);
-            return;
-        }
-
-        ////////////    Gestion des erreurs d'arguments invalides   ///////////////
-        if ($exception instanceof \InvalidArgumentException) {
-            $response = $this->apiResponseUtils->error(
-                errors: [
-                    ['field' => 'json', 'message' => $exception->getMessage()]
-                ],
-                messageKey: 'error.invalid_request',
-                status: Response::HTTP_BAD_REQUEST
-            );
-
-            $event->setResponse($response);
-            return;
-        }
-
-        ///////////    Gestion des entités non trouvées    ////////////////
-        if ($exception instanceof EntityNotFoundException) {
-
-            // Traduire le nom de l'entité
-            $translationParameters = $exception->getTranslationParameters();
-
-            // Traduire la clé de l'entité (si présente)
-            if (isset($translationParameters['%entity%'])) {
-                $translationParameters['%entity%'] = $this->translator->trans('entity_name.' . $translationParameters['%entity%']);
-            }
-
-            // Ajouter l'ID ou d'autres paramètres à la réponse si disponible
-            $errors = [
-                [
-                    'code' => $exception->getStatusCode(),
-                    'message' => $this->translator->trans($exception->getMessage(), $translationParameters),
-                ]
-            ];
-
-            // Ajouter l'ID si disponible
-            if (isset($translationParameters['id'])) {
-                $errors[0]['id'] = $translationParameters['id']; // Ajoute l'ID à l'erreur
-            }
-
-            $response = $this->apiResponseUtils->error(
-                errors: $errors,
-                messageKey: $exception->getMessage(),
-                messageParams: $translationParameters,
-                status: $exception->getStatusCode()
-            );
-
-            $event->setResponse($response);
-            return;
-        }
-
-        ///////////    Gestion des entités non Supprimable à cause de relations existantes   ////////////////
-        if ($exception instanceof EntityDeletionProhibitedException) {
-            $translationParameters = $exception->getTranslationParameters();
-
-            // Traduction des entités si présentes
-            if (isset($translationParameters['%entity%'])) {
-                $translationParameters['%entity%'] = $this->translator->trans('entity_name.' . $translationParameters['%entity%']);
-            }
-
-            if (isset($translationParameters['%related_entity%'])) {
-                $translationParameters['%related_entity%'] = $this->translator->trans('entity_name.' . $translationParameters['%related_entity%']);
-            }
-
-            $response = $this->apiResponseUtils->error(
-                errors: [
-                    [
-                        'message' => $this->translator->trans(
-                            $exception->getMessage(),
-                            $translationParameters
-                        ),
-                    ]
-                ],
-                messageKey: $exception->getMessage(),
-                messageParams: $translationParameters,
-                status: $exception->getStatusCode()
-            );
-
-            $event->setResponse($response);
-            return;
-        }
-
-        ///////////    Gestion des fichiers non fourni lors de l'upload    ////////////////
-        if ($exception instanceof FileNotProvidedException) {
-            $response = $this->apiResponseUtils->error(
-                errors: [
-                    [
-                        'field' => 'file',
-                        'message' => $this->translator->trans($exception->getMessage(), $exception->getTranslationParameters())
-                    ]
-                ],
-                messageKey: $exception->getMessage(),
-                messageParams: $exception->getTranslationParameters(),
-                status: $exception->getStatusCode()
-            );
-            $event->setResponse($response);
-            return;
-        }
-
-        ///////////    Gestion des erreurs de requête incorrecte    ///////////////
-        if ($exception instanceof BadRequestHttpException) {
-            $response = $this->apiResponseUtils->error(
-                errors: [
-                    [
-                        'code' => Response::HTTP_BAD_REQUEST,
-                        'message' => $this->translator->trans($exception->getMessage())
-                    ]
-                ],
-                messageKey: $exception->getMessage(),
-                status: Response::HTTP_BAD_REQUEST
-            );
-
-            $event->setResponse($response);
-            return;
-        }
+        return [
+            KernelEvents::EXCEPTION => ['onKernelException', 0],
+        ];
     }
 
     /**
-     * Traduit les erreurs de validation.
-     *
-     * @param array<int, array<string, mixed>> $errors Liste des erreurs de validation.
-     * @return array<int, array<string, string>> Erreurs traduites.
+     * Gestionnaire principal des exceptions.
      */
-    private function translateValidationErrors(array $errors): array
+    public function onKernelException(ExceptionEvent $event): void
     {
-        return array_map(
-            fn($error) => [
-                'field' => $error['field'],
-                'message' => $this->translator->trans($error['message'], $error['params'] ?? [])
-            ],
-            $errors
+        // Traiter uniquement les requêtes vers /api/*
+        if (!$this->isApiRequest($event)) {
+            return;
+        }
+
+        $exception = $event->getThrowable();
+
+        // Log de l'exception selon sa gravité
+        $this->logException($exception);
+
+        // Conversion en réponse JSON
+        $response = $this->createJsonResponse($exception);
+
+        $event->setResponse($response);
+    }
+
+    // ===============================================
+    // CRÉATION DES RÉPONSES JSON
+    // ===============================================
+
+    private function createJsonResponse(\Throwable $exception): JsonResponse
+    {
+        return match (true) {
+            // Exceptions métier de l'application
+            $exception instanceof ValidationException => $this->handleValidationException($exception),
+            $exception instanceof EntityNotFoundException => $this->handleEntityNotFoundException($exception),
+            $exception instanceof ConflictException => $this->handleConflictException($exception),
+            $exception instanceof BusinessRuleException => $this->handleBusinessRuleException($exception),
+            $exception instanceof AppException => $this->handleAppException($exception),
+
+            // Exceptions Doctrine
+            $exception instanceof UniqueConstraintViolationException => $this->handleUniqueConstraintViolation($exception),
+
+            // Exceptions HTTP Symfony
+            $exception instanceof HttpExceptionInterface => $this->handleHttpException($exception),
+
+            // Autres exceptions (500)
+            default => $this->handleGenericException($exception),
+        };
+    }
+
+    /**
+     * Gestion des erreurs de validation.
+     */
+    private function handleValidationException(ValidationException $exception): JsonResponse
+    {
+        return $this->apiResponseUtils->validationFailed(
+            $exception->getFormattedErrors()
         );
     }
 
     /**
-     * Définit les événements écoutés par le subscriber.
-     *
-     * @return array<string, array<int, mixed>> Liste des événements et de leurs priorités.
+     * Gestion des entités non trouvées.
      */
-    public static function getSubscribedEvents(): array
+    private function handleEntityNotFoundException(EntityNotFoundException $exception): JsonResponse
     {
-        return [ExceptionEvent::class => ['onKernelException', 10]];
+        return $this->apiResponseUtils->notFound(
+            $exception->getContext()['entity'],
+            $exception->getCriteria()
+        );
+    }
+
+    /**
+     * Gestion des conflits (ex: email déjà utilisé).
+     */
+    private function handleConflictException(ConflictException $exception): JsonResponse
+    {
+        $context = $exception->getContext();
+
+        return $this->apiResponseUtils->error(
+            errors: [[
+                'field' => $context['conflict_field'],
+                'value' => $context['conflict_value'],
+                'message' => $exception->getMessage()
+            ]],
+            messageKey: 'resource.conflict',
+            messageParams: [
+                '%resource%' => $context['resource'],
+                '%field%' => $context['conflict_field'],
+                '%value%' => $context['conflict_value']
+            ],
+            status: $exception->getStatusCode()
+        );
+    }
+
+    /**
+     * Gestion des règles métier violées.
+     */
+    private function handleBusinessRuleException(BusinessRuleException $exception): JsonResponse
+    {
+        return $this->apiResponseUtils->error(
+            errors: [[
+                'rule' => $exception->getRule(),
+                'message' => $exception->getMessage()
+            ]],
+            messageKey: $exception->getMessageKey(),
+            messageParams: $exception->getMessageParameters(),
+            status: $exception->getStatusCode()
+        );
+    }
+
+    /**
+     * Gestion des autres exceptions métier (AppException).
+     */
+    private function handleAppException(AppException $exception): JsonResponse
+    {
+        return $this->apiResponseUtils->error(
+            errors: [['message' => $exception->getMessage()]],
+            messageKey: $exception->getMessageKey(),
+            messageParams: $exception->getMessageParameters(),
+            status: $exception->getStatusCode()
+        );
+    }
+
+    /**
+     * Gestion des contraintes uniques Doctrine.
+     * 
+     * Convertit les erreurs DB en messages utilisateur compréhensibles.
+     */
+    private function handleUniqueConstraintViolation(UniqueConstraintViolationException $exception): JsonResponse
+    {
+        // Extraire le nom de la contrainte si possible
+        $message = $exception->getMessage();
+        $field = $this->extractFieldFromConstraint($message);
+
+        return $this->apiResponseUtils->error(
+            errors: [[
+                'field' => $field,
+                'message' => "This {$field} is already in use"
+            ]],
+            messageKey: 'database.unique_constraint',
+            status: 409
+        );
+    }
+
+    /**
+     * Gestion des exceptions HTTP Symfony.
+     */
+    private function handleHttpException(HttpExceptionInterface $exception): JsonResponse
+    {
+        return $this->apiResponseUtils->error(
+            errors: [['message' => $exception->getMessage()]],
+            messageKey: 'http.error',
+            status: $exception->getStatusCode()
+        );
+    }
+
+    /**
+     * Gestion des exceptions génériques (500).
+     */
+    private function handleGenericException(\Throwable $exception): JsonResponse
+    {
+        // En production, ne pas exposer les détails de l'erreur
+        $message = $this->isDebugMode()
+            ? $exception->getMessage()
+            : 'An unexpected error occurred';
+
+        return $this->apiResponseUtils->error(
+            errors: [['message' => $message]],
+            messageKey: 'error.internal',
+            status: 500
+        );
+    }
+
+    // ===============================================
+    // LOGGING DES EXCEPTIONS
+    // ===============================================
+
+    private function logException(\Throwable $exception): void
+    {
+        $level = $this->getLogLevel($exception);
+
+        $this->logger->log($level, $exception->getMessage(), [
+            'exception' => $exception,
+            'class' => get_class($exception),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+            'trace' => $exception->getTraceAsString(),
+        ]);
+    }
+
+    /**
+     * Détermine le niveau de log selon le type d'exception.
+     */
+    private function getLogLevel(\Throwable $exception): string
+    {
+        return match (true) {
+            // Erreurs utilisateur = warning (pas grave)
+            $exception instanceof ValidationException => 'warning',
+            $exception instanceof EntityNotFoundException => 'info',
+            $exception instanceof ConflictException => 'warning',
+            $exception instanceof BusinessRuleException => 'warning',
+
+            // Erreurs HTTP < 500 = warning
+            $exception instanceof HttpExceptionInterface && $exception->getStatusCode() < 500 => 'warning',
+
+            // Erreurs serveur = error (grave)
+            default => 'error',
+        };
+    }
+
+    // ===============================================
+    // MÉTHODES UTILITAIRES
+    // ===============================================
+
+    /**
+     * Vérifie si la requête est une requête API.
+     */
+    private function isApiRequest(ExceptionEvent $event): bool
+    {
+        return str_starts_with($event->getRequest()->getPathInfo(), '/api/');
+    }
+
+    /**
+     * Extrait le nom du champ depuis le message d'erreur de contrainte unique.
+     */
+    private function extractFieldFromConstraint(string $message): string
+    {
+        // Regex pour extraire le nom de la contrainte
+        // Ex: "Duplicate entry 'test@example.com' for key 'UNIQ_IDENTIFIER_EMAIL'"
+        if (preg_match('/for key [\'"](.+?)[\'"]/i', $message, $matches)) {
+            $constraintName = $matches[1];
+
+            // Extraire le nom du champ depuis le nom de la contrainte
+            // Ex: "UNIQ_IDENTIFIER_EMAIL" -> "email"
+            if (preg_match('/_([a-z]+)$/i', $constraintName, $fieldMatches)) {
+                return strtolower($fieldMatches[1]);
+            }
+        }
+
+        return 'field';
+    }
+
+    /**
+     * Vérifie si on est en mode debug.
+     */
+    private function isDebugMode(): bool
+    {
+        return isset($_ENV['APP_ENV']) && $_ENV['APP_ENV'] === 'dev';
     }
 }

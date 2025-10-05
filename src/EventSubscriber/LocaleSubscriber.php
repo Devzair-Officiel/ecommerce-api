@@ -17,21 +17,22 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
  */
 class LocaleSubscriber implements EventSubscriberInterface
 {
-    private LocaleAwareInterface $translator;
-    private string $defaultLocale;
-
     /**
      * @param LocaleAwareInterface $translator Service de traduction.
      * @param string $defaultLocale Langue par défaut (défaut: "en").
      */
-    public function __construct(LocaleAwareInterface $translator, string $defaultLocale = 'en')
-    {
-        $this->translator = $translator;
-        $this->defaultLocale = $defaultLocale;
-    }
+    public function __construct(
+        private LocaleAwareInterface $translator,
+        private string $defaultLocale = 'fr'
+    ) {}
 
     /**
-     * Définit la locale à utiliser en fonction de la requête.
+     * Définit la locale à utiliser en fonction de la requête HTTP.
+     *
+     * Priorité de sélection :
+     * 1. Si le paramètre `lang` est présent dans l’URL, il est utilisé.
+     * 2. Sinon, la locale est déterminée à partir de l'en-tête `Accept-Language`, si elle est supportée.
+     * 3. Si aucune langue valide n’est trouvée, la locale par défaut est utilisée.
      *
      * @param RequestEvent $event L'événement contenant la requête HTTP.
      */
@@ -39,19 +40,22 @@ class LocaleSubscriber implements EventSubscriberInterface
     {
         $request = $event->getRequest();
 
-        // Récupération de la langue depuis le paramètre `lang`
-        if ($lang = $request->query->get('lang', 'fr')) {
-            $request->setLocale($lang);
+        // Étape 1 : tenter de lire le paramètre `lang`
+        $langParam = $request->query->get('lang');
+
+        if ($langParam) {
+            $locale = $langParam;
+        } else {
+            // Étape 2 : lire l'en-tête Accept-Language uniquement si le paramètre `lang` est absent
+            $preferred = $request->getPreferredLanguage(['fr', 'en']);
+            $locale = $preferred ?: $this->defaultLocale;
         }
 
-        // Récupère la langue préférée depuis l'en-tête "Accept-Language"
-        $preferredLanguage = $request->getPreferredLanguage(['en', 'fr']); // Ajoute les langues supportées
-        $locale = $preferredLanguage ?: $this->defaultLocale;
-
-
-        // Appliquer la locale au service de traduction
-        $this->translator->setLocale($lang);
+        // Étape 3 : appliquer la locale sélectionnée
+        $request->setLocale($locale);
+        $this->translator->setLocale($locale);
     }
+
 
     /**
      * Définit les événements écoutés par le subscriber.

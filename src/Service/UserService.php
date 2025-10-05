@@ -1,140 +1,261 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service;
 
 use App\Entity\User;
-use App\Service\AbstractService;
+use App\Entity\User\Team;
+use App\Entity\Lov\Country;
+use App\Entity\User\Division;
+use App\Entity\Lov\MailLocale;
+use App\Entity\User\Laboratory;
+use App\Entity\Planning\Session;
+use App\Repository\UserRepository;
+use App\Service\Core\AbstractService;
+use App\Exception\ValidationException;
+use App\Service\Core\RelationProcessor;
+
 use Doctrine\ORM\EntityManagerInterface;
-use App\Exception\EntityNotFoundException;
-use App\Service\Processing\EntityProcessor;
-use App\Service\Processing\RelationManager;
-use App\Repository\Interface\UserRepositoryInterface;
+use Symfony\Component\Serializer\SerializerInterface;
+
+use Gesdinet\JWTRefreshTokenBundle\Entity\RefreshToken;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Gesdinet\JWTRefreshTokenBundle\Model\RefreshTokenManagerInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 
 class UserService extends AbstractService
 {
     public function __construct(
         EntityManagerInterface $em,
-        EntityProcessor $entityProcessor,
-        RelationManager $relationManager,
-        private readonly UserRepositoryInterface $userRepository,
-        private readonly UserPasswordHasherInterface $passwordHasher
+        SerializerInterface $serializer,
+        ValidatorInterface $validator,
+        RelationProcessor $relationProcessor,
+        private readonly UserPasswordHasherInterface $passwordHasher,
+        private readonly UserRepository $userRepository,
+        private JWTTokenManagerInterface $jwtManager,
+        private RefreshTokenManagerInterface $refreshTokenManager,
     ) {
-        parent::__construct($em, $entityProcessor, $relationManager);
+        parent::__construct($em, $serializer, $validator, $relationProcessor);
     }
 
-    public function createUser(string $jsonData): User
+    protected function getEntityClass(): string
     {
-        return $this->executeInTransaction(function () use ($jsonData) {
-            // 1. Traitement des données (validation automatique via contraintes)
-            $user = $this->processEntityFromJson($jsonData, User::class);
+        return User::class;
+    }
 
-            // 2. Validation métier
-            $this->validateForCreation($user);
+    protected function getRepository(): UserRepository
+    {
+        return $this->userRepository;
+    }
 
-            // 3. Hachage du mot de passe si fourni
-            if ($user->getPassword()) {
-                $hashedPassword = $this->passwordHasher->hashPassword($user, $user->getPassword());
-                $user->setPassword($hashedPassword);
+    /**
+     * Création avec hooks + retourne les tokens JWT.
+     * 
+     * @return array ['user' => User, 'token' => string, 'refresh_token' => string]
+     */
+    public function createUserWithTokens(array $data, array $context = []): array
+    {
+        $user = $this->em->wrapInTransaction(function () use ($data, $context) {
+            $entity = $this->deserializeToEntity($data);
+
+            // Validation avec groupe 'create' pour plainPassword
+            $this->validateEntity($entity, ['Default', 'create']);
+
+            $this->beforeCreate($entity, $data, $context);
+            $this->processRelations($entity, $data, 'create');
+
+            $this->em->persist($entity);
+            $this->em->flush();
+
+            return $entity;
+        });
+
+        // Génération des tokens APRÈS la transaction (user a son ID)
+        $token = $this->jwtManager->create($user);
+
+        $refreshToken = new RefreshToken();
+        $refreshToken->setRefreshToken(bin2hex(random_bytes(32)));
+        $refreshToken->setUsername($user->getUserIdentifier());
+        $refreshToken->setValid((new \DateTime())->modify('+30 days'));
+        $this->refreshTokenManager->save($refreshToken);
+
+        return [
+            'user' => $user,
+            'token' => $token,
+            'refresh_token' => $refreshToken->getRefreshToken()
+        ];
+    }
+
+    /**
+     * Méthode create standard sans tokens (pour compatibilité).
+     */
+    public function create(array $data, array $context = []): object
+    {
+        return $this->createUserWithTokens($data, $context)['user'];
+    }
+
+    public function update(int $id, array $data, array $context = []): object
+    {
+        return $this->updateWithHooks($id, $data, $context);
+    }
+
+    public function delete(int $id, array $context = []): object
+    {
+        return $this->deleteWithHooks($id, $context);
+    }
+
+    // ===============================================
+    // HOOKS MÉTIER
+    // ===============================================
+
+    protected function beforeCreate(object $entity, array $data, array $context): void
+    {
+        /** @var User $entity */
+
+        $existing = $this->userRepository->findByEmail($entity->getEmail());
+        $this->throwConflictIfExists($existing, 'email', $entity->getEmail());
+
+        // Hash du password depuis plainPassword
+        $plainPassword = $entity->getPlainPassword();
+        if ($plainPassword) {
+            $hashedPassword = $this->passwordHasher->hashPassword($entity, $plainPassword);
+            $entity->setPassword($hashedPassword);
+            $entity->setPlainPassword(null);
+        }
+
+        // Rôle par défaut
+        if (empty($entity->getRoles())) {
+            $entity->setRoles(['ROLE_USER']);
+        }
+
+        // Statut valid par défaut
+        if ($entity->isValid() === null) {
+            $entity->setValid(true);
+        }
+    }
+
+    protected function beforeUpdate(object $entity, array $data, array $context): void
+    {
+        // Validation avec groupe approprié si password change
+        $plainPassword = $entity->getPlainPassword();
+        if ($plainPassword) {
+            // Re-valider avec groupe update_password
+            $violations = $this->validator->validate($entity, null, ['Default', 'update_password']);
+            if (count($violations) > 0) {
+                $errors = \App\Utils\ValidationUtils::formatValidationErrors($violations);
+                throw new ValidationException($errors);
             }
 
-            // 4. Sauvegarde (dates automatiques via DateTrait)
-            $this->saveEntity($user);
-
-            return $user;
-        });
+            $hashedPassword = $this->passwordHasher->hashPassword($entity, $plainPassword);
+            $entity->setPassword($hashedPassword);
+            $entity->setPlainPassword(null);
+        }
     }
 
-    public function updateUser(int $id, string $jsonData): User
+    // ===============================================
+    // MÉTHODES MÉTIER DÉDIÉES (ENDPOINTS SÉPARÉS)
+    // ===============================================
+
+    /**
+     * Trouve un utilisateur par email.
+     * Utilisé pour la validation et l'authentification.
+     */
+    public function findByEmail(string $email): ?User
     {
-        return $this->executeInTransaction(function () use ($id, $jsonData) {
-            $user = $this->findEntityByCriteria(User::class, ['id' => $id]);
-
-            // Sauvegarde de l'ancien mot de passe
-            $oldPassword = $user->getPassword();
-
-            $this->processEntityFromJson($jsonData, User::class, $user);
-
-            // Validation métier
-            $this->validateForUpdate($user);
-
-            // Gestion du mot de passe
-            $this->handlePasswordUpdate($user, $oldPassword);
-
-            $this->saveEntity($user);
-
-            return $user;
-        });
+        return $this->userRepository->findByEmail($email);
     }
 
-    public function getUser(int $id): User
+    /**
+     * Change le mot de passe d'un utilisateur.
+     * Endpoint dédié : PATCH /users/{id}/password
+     * 
+     * Avantages :
+     * - Validation spécifique (groupe update_password)
+     * - Sécurité : peut être restreint (user change son propre password)
+     * - Révocation des anciens tokens
+     */
+    public function changePassword(int $id, string $newPlainPassword): User
     {
-        return $this->findEntityByCriteria(User::class, ['id' => $id]);
+        $user = $this->findEntityById($id);
+        $user->setPlainPassword($newPlainPassword);
+
+        // Validation avec groupe update_password
+        $violations = $this->validator->validate($user, null, ['update_password']);
+        if (count($violations) > 0) {
+            $errors = \App\Utils\ValidationUtils::formatValidationErrors($violations);
+            throw new ValidationException($errors);
+        }
+
+        $hashedPassword = $this->passwordHasher->hashPassword($user, $newPlainPassword);
+        $user->setPassword($hashedPassword);
+        $user->setPlainPassword(null);
+
+        $this->em->flush();
+
+        // Révocation des anciens tokens pour forcer reconnexion
+        $this->refreshTokenManager->revokeAllInvalid();
+
+        return $user;
     }
 
-    public function getUserByEmail(string $email): User
+    /**
+     * Active/désactive un utilisateur.
+     * Endpoint dédié : PATCH /users/{id}/status
+     * 
+     * Avantages :
+     * - Action claire et explicite
+     * - Peut être restrictif (ROLE_ADMIN uniquement)
+     * - Révocation des tokens si désactivation
+     */
+    public function toggleStatus(int $id, bool $valid): User
     {
-        $user = $this->userRepository->findByEmail($email);
+        $user = $this->findEntityById($id);
+        $user->setIsValid($valid);
 
-        if (!$user) {
-            throw new EntityNotFoundException('user', ['email' => $email]);
+        $this->em->flush();
+
+        // Si désactivation, révoquer les tokens invalides
+        if (!$valid) {
+            $this->refreshTokenManager->revokeAllInvalid();
         }
 
         return $user;
     }
 
-    public function deleteUser(int $id): User
-    {
-        return $this->executeInTransaction(function () use ($id) {
-            $user = $this->findEntityByCriteria(User::class, ['id' => $id]);
-
-            $this->validateDeletion($user);
-
-            $this->removeEntity($user);
-
-            return $user;
-        });
-    }
-
-    public function toggleUserStatus(int $id, bool $active): User
-    {
-        $user = $this->findEntityByCriteria(User::class, ['id' => $id]);
-
-        $user->setIsActive($active);
-        $this->saveEntity($user);
-
-        return $user;
-    }
-
-    public function changePassword(int $id, string $newPassword): User
-    {
-        $user = $this->findEntityByCriteria(User::class, ['id' => $id]);
-
-        $hashedPassword = $this->passwordHasher->hashPassword($user, $newPassword);
-        $user->setPassword($hashedPassword);
-
-        $this->saveEntity($user);
-
-        return $user;
-    }
-
+    /**
+     * Ajoute un rôle à un utilisateur.
+     * Endpoint dédié : POST /users/{id}/roles
+     * 
+     * Avantages :
+     * - Gestion granulaire des permissions
+     * - ROLE_ADMIN uniquement
+     * - Évite les erreurs dans update général
+     */
     public function addRole(int $id, string $role): User
     {
-        $user = $this->findEntityByCriteria(User::class, ['id' => $id]);
+        $user = $this->findEntityById($id);
 
         $roles = $user->getRoles();
         if (!in_array($role, $roles, true)) {
             $roles[] = $role;
             $user->setRoles($roles);
-            $this->saveEntity($user);
+            $this->em->flush();
         }
 
         return $user;
     }
 
+    /**
+     * Retire un rôle d'un utilisateur.
+     * Endpoint dédié : DELETE /users/{id}/roles/{role}
+     * 
+     * Protection : impossible de retirer ROLE_USER
+     */
     public function removeRole(int $id, string $role): User
     {
-        $user = $this->findEntityByCriteria(User::class, ['id' => $id]);
+        $user = $this->findEntityById($id);
 
         if ($role === 'ROLE_USER') {
             throw new \InvalidArgumentException('Cannot remove ROLE_USER');
@@ -142,47 +263,50 @@ class UserService extends AbstractService
 
         $roles = array_values(array_diff($user->getRoles(), [$role]));
         $user->setRoles($roles);
-        $this->saveEntity($user);
+        $this->em->flush();
 
         return $user;
     }
 
-    // === VALIDATION MÉTIER ===
 
-    private function validateForCreation(User $user): void
-    {
-        if ($this->userRepository->findByEmail($user->getEmail())) {
-            throw new \InvalidArgumentException('Email already exists');
-        }
-    }
-
-    private function validateForUpdate(User $user): void
-    {
-        $existingUser = $this->userRepository->findByEmail($user->getEmail());
-        if ($existingUser && $existingUser->getId() !== $user->getId()) {
-            throw new \InvalidArgumentException('Email already exists');
-        }
-    }
-
-    private function validateDeletion(User $user): void
-    {
-        if ($this->userRepository->hasActiveOrders($user)) {
-            throw new \DomainException('Cannot delete user with active orders');
-        }
-    }
-
-    private function handlePasswordUpdate(User $user, string $oldPassword): void
-    {
-        // Si le mot de passe a changé et n'est pas vide
-        if ($user->getPassword() && $user->getPassword() !== $oldPassword) {
-            // Si ce n'est pas déjà un hash (nouveau mot de passe en clair)
-            if (!password_get_info($user->getPassword())['algo']) {
-                $hashedPassword = $this->passwordHasher->hashPassword($user, $user->getPassword());
-                $user->setPassword($hashedPassword);
-            }
-        } elseif (!$user->getPassword()) {
-            // Si le mot de passe est vide, on garde l'ancien
-            $user->setPassword($oldPassword);
-        }
-    }
+    // protected function getRelationConfig(): array
+    // {
+    //     return [
+    //         'team' => [
+    //             'type' => 'many_to_one',
+    //             'target_entity' => Team::class,
+    //             'identifier_key' => 'id',
+    //         ],
+    //         'division' => [
+    //             'type' => 'many_to_one',
+    //             'target_entity' => Division::class,
+    //             'identifier_key' => 'id',
+    //         ],
+    //         'laboratory' => [
+    //             'type' => 'many_to_one',
+    //             'target_entity' => Laboratory::class,
+    //             'identifier_key' => 'id',
+    //         ],
+    //         'country' => [
+    //             'type' => 'many_to_one',
+    //             'target_entity' => Country::class,
+    //             'identifier_key' => 'id',
+    //         ],
+    //         'mailLocale' => [
+    //             'type' => 'many_to_one',
+    //             'target_entity' => MailLocale::class,
+    //             'identifier_key' => 'id',
+    //         ],
+    //         'supervisors' => [
+    //             'type' => 'many_to_many',
+    //             'target_entity' => User::class,
+    //             'identifier_key' => 'id',
+    //         ],
+    //         'sessions' => [
+    //             'type' => 'many_to_many',
+    //             'target_entity' => Session::class,
+    //             'identifier_key' => 'id',
+    //         ],
+    //     ];
+    // }
 }

@@ -5,145 +5,76 @@ namespace App\Repository;
 use App\Entity\Product;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
-use App\ValueObject\ProductSearchCriteria;
-use App\Repository\Interface\ProductRepositoryInterface;
-use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use App\Repository\Core\AbstractRepository;
 
-/**
- * @extends ServiceEntityRepository<Product>
- */
-class ProductRepository extends ServiceEntityRepository implements ProductRepositoryInterface
+class ProductRepository extends AbstractRepository
 {
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, Product::class);
     }
 
-    public function findByCriteria(ProductSearchCriteria $criteria): array
+
+    /** Configuration des champs autorisés pour le tri */
+    protected array $sortableFields = [
+        'id',
+        'createdAt',
+        'isActive'
+    ];
+
+    /** Champs de recherche textuelle */
+    protected array $searchableFields = [
+        'title',
+        'description',
+    ];
+
+
+    /**
+     * Implémentation de la recherche paginée pour Product.
+     */
+    public function findWithPagination(int $page, int $limit, array $filters = []): array
     {
-        $qb = $this->createQueryBuilder('p');
+        $qb = $this->createBaseQueryBuilder();
 
-        $this->buildCriteria($qb, $criteria);
-        $this->buildSorting($qb, $criteria);
-        $this->buildPagination($qb, $criteria);
+        // Application des filtres génériques (hérités)
+        $this->applyTextSearch($qb, $filters);
+        $this->applySorting($qb, $filters);
+        $this->applyBooleanFilter($qb, $filters, 'isActive', 'isActive');
+        $this->applyDateRangeFilter($qb, $filters, 'createdAt');
 
-        return $qb->getQuery()->getResult();
+        // Filtres spécifiques à Product (logique métier)
+        $this->applyProductSpecificFilters($qb, $filters);
+
+        return $this->buildPaginatedResponse($qb, $page, $limit);
     }
 
-    public function countByCriteria(ProductSearchCriteria $criteria): int
-    {
-        $qb = $this->createQueryBuilder('p')
-            ->select('COUNT(p.id)');
-
-        $this->buildCriteria($qb, $criteria);
-
-        return (int) $qb->getQuery()->getSingleScalarResult();
-    }
-
-    public function hasActiveOrders(Product $product): bool
-    {
-        return (bool) $this->getEntityManager()
-            ->createQuery(
-                'SELECT COUNT(oi.id) 
-                 FROM App\Entity\OrderItem oi 
-                 JOIN oi.order o 
-                 WHERE oi.product = :product 
-                 AND o.status IN (:statuses)'
-            )
-            ->setParameter('product', $product)
-            ->setParameter('statuses', ['pending', 'processing', 'shipped'])
-            ->getSingleScalarResult();
-    }
-
-    public function findBySlugWithSite(string $slug, int $siteId): ?Product
+    /**
+     * Entité actifs uniquement.
+     */
+    public function findValidProducts(): array
     {
         return $this->createQueryBuilder('p')
-            ->where('p.slug = :slug')
-            ->andWhere('p.site = :siteId')
-            ->setParameter('slug', $slug)
-            ->setParameter('siteId', $siteId)
-            ->getQuery()
-            ->getOneOrNullResult();
-    }
-
-    public function findFeaturedBySite(int $siteId, int $limit = 10): array
-    {
-        return $this->createQueryBuilder('p')
-            ->where('p.site = :siteId')
-            ->andWhere('p.featured = true')
-            ->andWhere('p.isActive = true')
-            ->orderBy('p.createdAt', 'DESC')
-            ->setMaxResults($limit)
-            ->setParameter('siteId', $siteId)
+            ->where('p.isValid = true')
             ->getQuery()
             ->getResult();
     }
 
-    // === MÉTHODES PRIVÉES POUR DÉCOUPER LA LOGIQUE ===
-
-    private function buildCriteria(QueryBuilder $qb, ProductSearchCriteria $criteria): void
+    /**
+     * Filtres spécifiques au domaine Product.
+     */
+    private function applyProductSpecificFilters(QueryBuilder $qb, array $filters): void
     {
-        if ($criteria->search) {
-            $qb->andWhere('p.name LIKE :search OR p.description LIKE :search')
-                ->setParameter('search', '%' . $criteria->search . '%');
+        // Filtre par Titre
+        if (!empty($filters['title'])) {
+            $qb->andWhere('e.title LIKE :title')
+                ->setParameter('title', '%' . $filters['title'] . '%');
         }
 
-        if ($criteria->categoryId) {
-            $qb->join('p.categories', 'c')
-                ->andWhere('c.id = :categoryId')
-                ->setParameter('categoryId', $criteria->categoryId);
+        // Filtre par Product (relation)
+        if (isset($filters['laboratory_id'])) {
+            $qb->join('e.laboratory', 'l')
+                ->andWhere('d.id = :laboratoryId')
+                ->setParameter('laboratoryId', $filters['laboratory_id']);
         }
-
-        if ($criteria->siteId) {
-            $qb->andWhere('p.site = :siteId')
-                ->setParameter('siteId', $criteria->siteId);
-        }
-
-        if ($criteria->isActive !== null) {
-            $qb->andWhere('p.isActive = :isActive')
-                ->setParameter('isActive', $criteria->isActive);
-        }
-
-        if ($criteria->isFeatured !== null) {
-            $qb->andWhere('p.featured = :featured')
-                ->setParameter('featured', $criteria->isFeatured);
-        }
-
-        if ($criteria->minPrice) {
-            $qb->andWhere('p.price >= :minPrice')
-                ->setParameter('minPrice', $criteria->minPrice);
-        }
-
-        if ($criteria->maxPrice) {
-            $qb->andWhere('p.price <= :maxPrice')
-                ->setParameter('maxPrice', $criteria->maxPrice);
-        }
-
-        if ($criteria->inStock !== null) {
-            $operator = $criteria->inStock ? '>' : '=';
-            $qb->andWhere("p.stock {$operator} 0");
-        }
-
-        if ($criteria->sku) {
-            $qb->andWhere('p.sku = :sku')
-                ->setParameter('sku', $criteria->sku);
-        }
-    }
-
-    private function buildSorting(QueryBuilder $qb, ProductSearchCriteria $criteria): void
-    {
-        $allowedSortFields = ['id', 'name', 'price', 'createdAt', 'stock', 'featured'];
-
-        if (in_array($criteria->sortBy, $allowedSortFields, true)) {
-            $qb->orderBy('p.' . $criteria->sortBy, $criteria->sortOrder);
-        } else {
-            $qb->orderBy('p.createdAt', 'DESC'); // Fallback sécurisé
-        }
-    }
-
-    private function buildPagination(QueryBuilder $qb, ProductSearchCriteria $criteria): void
-    {
-        $qb->setFirstResult($criteria->offset)
-            ->setMaxResults($criteria->limit);
     }
 }

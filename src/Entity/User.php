@@ -1,8 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Entity;
 
 use App\Traits\DateTrait;
+use App\Traits\IsValidTrait;
 use Doctrine\ORM\Mapping as ORM;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -11,6 +14,8 @@ use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Serializer\Normalizer\DateTimeNormalizer;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Serializer\Annotation\Context;
+use Symfony\Component\Validator\Constraints as Assert;
+
 
 
 #[ORM\Entity]
@@ -18,7 +23,7 @@ use Symfony\Component\Serializer\Annotation\Context;
 #[ORM\Index(columns: ['email'], name: 'idx_user_email')]
 class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
-    use DateTrait;
+    use DateTrait, IsValidTrait;
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -32,6 +37,14 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\Column]
     private array $roles = [];
+
+    #[Assert\NotBlank(message: 'not_blank', groups: ['create'])]
+    #[Assert\Length(
+        min: 8,
+        minMessage: 'length_min',
+        groups: ['create', 'update_password']
+    )]
+    private ?string $plainPassword = null;
 
     #[ORM\Column]
     private ?string $password = null;
@@ -111,7 +124,26 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         $this->password = $password;
         return $this;
     }
-    public function eraseCredentials(): void {}
+
+    /**
+     * @see UserInterface
+     */
+    public function eraseCredentials(): void
+    {
+        $this->plainPassword = null; // nettoie la donnée sensible
+    }
+
+    public function getPlainPassword(): ?string
+    {
+        return $this->plainPassword;
+    }
+
+    public function setPlainPassword(?string $plainPassword): self
+    {
+        $this->plainPassword = $plainPassword;
+        return $this;
+    }
+
     public function getFirstName(): ?string
     {
         return $this->firstName;

@@ -1,17 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Controller;
 
-use App\Service\UserService;
 use App\Utils\ApiResponseUtils;
-use App\Utils\SerializationUtils;
+use App\Service\UserService;
 use App\Exception\ValidationException;
-use App\Service\Search\UserSearchService;
-use App\Exception\EntityNotFoundException;
 use Symfony\Component\HttpFoundation\Request;
+use App\Controller\Core\AbstractApiController;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
+
 
 /**
  * Contrôleur pour la gestion des utilisateurs via API REST.
@@ -23,258 +25,201 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
  * - Changement de mot de passe
  */
 #[Route('/users', name: 'api_users_')]
-class UserController extends AbstractController
+class UserController extends AbstractApiController
 {
     public function __construct(
-        private readonly UserService $userService,
-        private readonly UserSearchService $searchService,
-        private readonly SerializationUtils $serializer,
-        private readonly ApiResponseUtils $apiResponse
-    ) {}
-
-    /**
-     * Crée un nouvel utilisateur.
-     * 
-     * @param Request $request Données JSON : email, firstName, lastName, password, phone (optionnel)
-     * @return JsonResponse Utilisateur créé avec ses détails
-     */
-    #[Route('', methods: ['POST'], name: 'create')]
-    public function create(Request $request): JsonResponse
-    {
-        try {
-            $user = $this->userService->createUser($request->getContent());
-
-            $data = $this->serializer->serialize($user, ['user_detail', 'date']);
-
-            return $this->apiResponse->created($data, 'user');
-        } catch (ValidationException $e) {
-            return $this->apiResponse->validationFailed($e->getErrors());
-        } catch (\InvalidArgumentException $e) {
-            return $this->apiResponse->error([['message' => $e->getMessage()]]);
-        }
+        ApiResponseUtils $apiResponseUtils,
+        SerializerInterface $serializer,
+        private readonly UserService $userService
+    ) {
+        parent::__construct($apiResponseUtils, $serializer);
     }
 
     /**
-     * Met à jour un utilisateur existant.
-     * 
-     * @param int $id ID de l'utilisateur à modifier
-     * @param Request $request Données JSON partielles à modifier
-     * @return JsonResponse Utilisateur mis à jour
+     * Liste paginée des utilisateurs.
      */
-    #[Route('/{id}', methods: ['PUT'], requirements: ['id' => '\d+'], name: 'update')]
-    public function update(int $id, Request $request): JsonResponse
-    {
-        try {
-            $user = $this->userService->updateUser($id, $request->getContent());
-
-            $data = $this->serializer->serialize($user, ['user_detail', 'date']);
-
-            return $this->apiResponse->updated($data, 'user');
-        } catch (EntityNotFoundException $e) {
-            return $this->apiResponse->notFound('user', ['id' => $id]);
-        } catch (ValidationException $e) {
-            return $this->apiResponse->validationFailed($e->getErrors());
-        } catch (\InvalidArgumentException $e) {
-            return $this->apiResponse->error([['message' => $e->getMessage()]]);
-        }
-    }
-
-    /**
-     * Récupère un utilisateur par son ID.
-     * 
-     * @param int $id ID de l'utilisateur
-     * @return JsonResponse Détails complets de l'utilisateur
-     */
-    #[Route('/{id}', methods: ['GET'], requirements: ['id' => '\d+'], name: 'show')]
-    public function show(int $id): JsonResponse
-    {
-        try {
-            $user = $this->userService->getUser($id);
-
-            $data = $this->serializer->serialize($user, ['user_detail', 'date']);
-
-            return $this->apiResponse->retrieved($data, 'user');
-        } catch (EntityNotFoundException $e) {
-            return $this->apiResponse->notFound('user', ['id' => $id]);
-        }
-    }
-
-    /**
-     * Liste les utilisateurs avec pagination et filtres.
-     * 
-     * Filtres disponibles : search, is_active, roles, email, sort_by, sort_order, page, limit
-     * 
-     * @param Request $request Paramètres de filtrage et pagination
-     * @return JsonResponse Liste paginée des utilisateurs avec métadonnées
-     */
-    #[Route('', methods: ['GET'], name: 'list')]
+    #[Route('', name: 'list', methods: ['GET'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function list(Request $request): JsonResponse
     {
-        $filters = $request->query->all();
-        $result = $this->searchService->searchUsers($filters);
+        $pagination = $this->getPaginationParams($request);
+        $filters = $this->extractFilters($request);
 
-        $result['items'] = $this->serializer->serialize($result['items'], ['user_list', 'date']);
+        $result = $this->userService->search(
+            $pagination['page'],
+            $pagination['limit'],
+            $filters
+        );
 
-        return $this->apiResponse->listRetrieved($result, 'user', 'api_users_list');
+        return $this->listResponse(
+            $result,
+            ['user_detail', 'date', 'isValid'],
+            'user',
+            'api_users_list'
+        );
     }
 
     /**
-     * Supprime un utilisateur.
-     * 
-     * Vérifie qu'aucune commande active n'est liée avant suppression.
-     * 
-     * @param int $id ID de l'utilisateur à supprimer
-     * @return JsonResponse Utilisateur supprimé ou erreur si suppression impossible
+     * Détail d'un utilisateur.
      */
-    #[Route('/{id}', methods: ['DELETE'], requirements: ['id' => '\d+'], name: 'delete')]
+    #[Route('/{id}', methods: ['GET'], requirements: ['id' => '\d+'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function show(int $id): JsonResponse
+    {
+        $user = $this->userService->findEntityById($id);
+
+        return $this->showResponse(
+            $user,
+            ['user_detail', 'date', 'user_supervisor', 'user_teams'],
+            'user'
+        );
+    }
+
+    /**
+     * Création d'un utilisateur avec tokens JWT.
+     */
+    #[Route('', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function create(Request $request): JsonResponse
+    {
+        $data = $this->getJsonData($request);
+
+        $result = $this->userService->createUserWithTokens($data);
+
+        return $this->createResponse(
+            $result['user'],
+            ['user_detail', 'date'],
+            'user',
+            [
+                'token' => $result['token'],
+                'refresh_token' => $result['refresh_token']
+            ]
+        );
+    }
+
+    /**
+     * Mise à jour du profil utilisateur.
+     * Ne gère PAS : password, rôles, statut (endpoints dédiés).
+     */
+    #[Route('/{id}', methods: ['PUT', 'PATCH'], requirements: ['id' => '\d+'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function update(int $id, Request $request): JsonResponse
+    {
+        $data = $this->getJsonData($request);
+
+        // Sécurité : empêcher changement de champs sensibles
+        unset($data['password'], $data['plainPassword'], $data['roles'], $data['isValid']);
+
+        $user = $this->userService->update($id, $data);
+
+        return $this->updateResponse(
+            $user,
+            ['user_detail', 'date'],
+            'user'
+        );
+    }
+
+    /**
+     * Suppression d'un utilisateur.
+     */
+    #[Route('/{id}', methods: ['DELETE'], requirements: ['id' => '\d+'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function delete(int $id): JsonResponse
     {
-        try {
-            $user = $this->userService->deleteUser($id);
+        $user = $this->userService->delete($id);
 
-            $data = $this->serializer->serialize($user, ['user_detail']);
-
-            return $this->apiResponse->deleted($data, 'user');
-        } catch (EntityNotFoundException $e) {
-            return $this->apiResponse->notFound('user', ['id' => $id]);
-        } catch (\DomainException $e) {
-            return $this->apiResponse->error([['message' => $e->getMessage()]], status: 409);
-        }
+        return $this->deleteResponse(
+            ['id' => $user->getId(), 'email' => $user->getEmail()],
+            'user'
+        );
     }
 
     /**
-     * Active ou désactive un utilisateur.
-     * 
-     * @param int $id ID de l'utilisateur
-     * @param Request $request JSON : { "active": true|false }
-     * @return JsonResponse Utilisateur avec nouveau statut
+     * Changement de mot de passe (endpoint dédié).
      */
-    #[Route('/{id}/toggle-status', methods: ['PATCH'], requirements: ['id' => '\d+'], name: 'toggle_status')]
-    public function toggleStatus(int $id, Request $request): JsonResponse
-    {
-        try {
-            $data = json_decode($request->getContent(), true);
-            $active = filter_var($data['active'] ?? true, FILTER_VALIDATE_BOOLEAN);
-
-            $user = $this->userService->toggleUserStatus($id, $active);
-
-            $responseData = $this->serializer->serialize($user, ['user_detail', 'admin_read']);
-
-            return $this->apiResponse->updated($responseData, 'user');
-        } catch (EntityNotFoundException $e) {
-            return $this->apiResponse->notFound('user', ['id' => $id]);
-        }
-    }
-
-    /**
-     * Change le mot de passe d'un utilisateur.
-     * 
-     * @param int $id ID de l'utilisateur
-     * @param Request $request JSON : { "password": "nouveau_mot_de_passe" }
-     * @return JsonResponse Confirmation du changement
-     */
-    #[Route('/{id}/password', methods: ['PATCH'], requirements: ['id' => '\d+'], name: 'change_password')]
+    #[Route('/{id}/password', methods: ['PATCH'], requirements: ['id' => '\d+'])]
     public function changePassword(int $id, Request $request): JsonResponse
     {
+        $data = $this->getJsonData($request);
+
+        // Validation avec helper
         try {
-            $data = json_decode($request->getContent(), true);
+            $this->requireField($data, 'newPassword', 'New password is required');
+        } catch (\InvalidArgumentException $e) {
+            return $this->missingFieldError('newPassword');
+        }
 
-            if (empty($data['password'])) {
-                return $this->apiResponse->error([['message' => 'Password is required']]);
-            }
+        try {
+            $user = $this->userService->changePassword($id, $data['newPassword']);
 
-            $user = $this->userService->changePassword($id, $data['password']);
-
-            $responseData = $this->serializer->serialize($user, ['user_detail']);
-
-            return $this->apiResponse->success($responseData, 'success.password_changed');
-        } catch (EntityNotFoundException $e) {
-            return $this->apiResponse->notFound('user', ['id' => $id]);
+            return $this->apiResponseUtils->success(
+                data: ['id' => $user->getId()],
+                messageKey: 'user.password_changed',
+                entityKey: 'user'
+            );
+        } catch (ValidationException $e) {
+            return $this->validationError($e->getFormattedErrors());
         }
     }
 
     /**
-     * Ajoute un rôle à un utilisateur.
-     * 
-     * @param int $id ID de l'utilisateur
-     * @param Request $request JSON : { "role": "ROLE_ADMIN" }
-     * @return JsonResponse Utilisateur avec nouveau rôle
+     * Activation/désactivation (endpoint dédié).
      */
-    #[Route('/{id}/roles', methods: ['POST'], requirements: ['id' => '\d+'], name: 'add_role')]
+    #[Route('/{id}/status', methods: ['PATCH'], name: "toggle_status", requirements: ['id' => '\d+'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function toggleStatus(int $id, Request $request): JsonResponse
+    {
+        $data = $this->getJsonData($request);
+
+        // Utilisation du helper pour boolean
+        $isValid = $this->getBooleanValue($data, 'isValid');
+
+        $user = $this->userService->toggleStatus($id, $isValid);
+
+        return $this->statusReponse(
+            data: ['id' => $id, 'email' => $user->getEmail(), 'isValid' => $user->isValid()],
+            entityKey: 'user',
+            isValid: $isValid
+        );
+    }
+
+    /**
+     * Ajout de rôle (endpoint dédié).
+     */
+    #[Route('/{id}/roles', methods: ['POST'], requirements: ['id' => '\d+'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function addRole(int $id, Request $request): JsonResponse
     {
+        $data = $this->getJsonData($request);
+
         try {
-            $data = json_decode($request->getContent(), true);
-
-            if (empty($data['role'])) {
-                return $this->apiResponse->error([['message' => 'Role is required']]);
-            }
-
-            $user = $this->userService->addRole($id, $data['role']);
-
-            $responseData = $this->serializer->serialize($user, ['user_detail', 'admin_read']);
-
-            return $this->apiResponse->success($responseData, 'success.role_added');
-        } catch (EntityNotFoundException $e) {
-            return $this->apiResponse->notFound('user', ['id' => $id]);
+            $this->requireField($data, 'role', null);
+        } catch (\InvalidArgumentException $e) {
+            return $this->missingFieldError('role');
         }
+
+        $user = $this->userService->addRole($id, $data['role']);
+
+        return $this->apiResponseUtils->success(
+            data: ['id' => $user->getId(), 'roles' => $user->getRoles()],
+            messageKey: 'user.role_added',
+            entityKey: 'user'
+        );
     }
 
     /**
-     * Retire un rôle d'un utilisateur.
-     * 
-     * Note : ROLE_USER ne peut pas être retiré.
-     * 
-     * @param int $id ID de l'utilisateur
-     * @param string $role Rôle à retirer (ex: ROLE_ADMIN)
-     * @return JsonResponse Utilisateur sans le rôle retiré
+     * Retrait de rôle (endpoint dédié).
      */
-    #[Route('/{id}/roles/{role}', methods: ['DELETE'], requirements: ['id' => '\d+'], name: 'remove_role')]
+    #[Route('/{id}/roles/{role}', methods: ['DELETE'], requirements: ['id' => '\d+'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function removeRole(int $id, string $role): JsonResponse
     {
-        try {
-            $user = $this->userService->removeRole($id, $role);
+        $user = $this->userService->removeRole($id, $role);
 
-            $responseData = $this->serializer->serialize($user, ['user_detail', 'admin_read']);
-
-            return $this->apiResponse->success($responseData, 'success.role_removed');
-        } catch (EntityNotFoundException $e) {
-            return $this->apiResponse->notFound('user', ['id' => $id]);
-        } catch (\InvalidArgumentException $e) {
-            return $this->apiResponse->error([['message' => $e->getMessage()]]);
-        }
-    }
-
-    /**
-     * Récupère tous les utilisateurs actifs.
-     * 
-     * @return JsonResponse Liste des utilisateurs avec isActive = true
-     */
-    #[Route('/active', methods: ['GET'], name: 'active')]
-    public function activeUsers(): JsonResponse
-    {
-        $users = $this->searchService->getActiveUsers();
-
-        $data = $this->serializer->serialize($users, ['user_list']);
-
-        return $this->apiResponse->success($data);
-    }
-
-    /**
-     * Recherche les utilisateurs par rôle avec pagination.
-     * 
-     * @param string $role Rôle recherché (ex: ROLE_ADMIN)
-     * @param Request $request Paramètres de pagination et filtres additionnels
-     * @return JsonResponse Liste paginée des utilisateurs ayant ce rôle
-     */
-    #[Route('/by-role/{role}', methods: ['GET'], name: 'by_role')]
-    public function usersByRole(string $role, Request $request): JsonResponse
-    {
-        $filters = $request->query->all();
-        $result = $this->searchService->searchUsersByRole($role, $filters);
-
-        $result['items'] = $this->serializer->serialize($result['items'], ['user_list']);
-
-        return $this->apiResponse->success($result);
+        return $this->apiResponseUtils->success(
+            data: ['id' => $user->getId(), 'roles' => $user->getRoles()],
+            messageKey: 'user.role_removed',
+            entityKey: 'user'
+        );
     }
 }

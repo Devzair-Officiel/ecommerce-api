@@ -69,19 +69,19 @@ class Product
     #[ORM\Column(type: 'decimal', precision: 10, scale: 2, nullable: true)]
     #[Groups(['product_list', 'product_detail', 'public_read'])]
     #[Assert\PositiveOrZero(message: "validation.product.original_price.positive")]
-    #[BusinessRule(
-        method: 'validateOriginalPrice',
-        message: 'validation.product.original_price.must_be_higher'
-    )]
+    // #[BusinessRule(
+    //     method: 'validateOriginalPrice',
+    //     message: 'validation.product.original_price.must_be_higher'
+    // )]
     private ?string $originalPrice = null;
 
     #[ORM\Column]
     #[Groups(['product_detail', 'admin_read'])]
     #[Assert\PositiveOrZero(message: "validation.product.stock.positive")]
-    #[BusinessRule(
-        method: 'validateStockConsistency',
-        message: 'validation.product.stock.below_minimum'
-    )]
+    // #[BusinessRule(
+    //     method: 'validateStockConsistency',
+    //     message: 'validation.product.stock.below_minimum'
+    // )]
     private int $stock = 0;
 
     #[ORM\Column]

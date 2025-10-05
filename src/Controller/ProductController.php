@@ -1,151 +1,134 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Controller;
 
 use App\Service\ProductService;
 use App\Utils\ApiResponseUtils;
-use App\Utils\SerializationUtils;
-use App\Exception\ValidationException;
-use App\Exception\EntityNotFoundException;
-use App\Service\Search\ProductSearchService;
 use Symfony\Component\HttpFoundation\Request;
+use App\Controller\Core\AbstractApiController;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
-use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 
-
-#[Route(name: 'api_products_')]
-class ProductController extends AbstractController
+#[Route('/products', name: 'api_products')]
+class ProductController extends AbstractApiController
 {
     public function __construct(
-        private readonly ProductService $productService,
-        private readonly ProductSearchService $searchService,
-        private readonly SerializationUtils $serializer,
-        private readonly ApiResponseUtils $apiResponse
-    ) {}
+        private ProductService $productService,
+        ApiResponseUtils $apiResponseUtils,
+        SerializerInterface $serializer,
 
-    #[Route('', methods: ['POST'])]
-    public function create(Request $request): JsonResponse
-    {
-        try {
-            $product = $this->productService->createProduct($request->getContent());
-
-            $data = $this->serializer->serialize($product, ['product_detail', 'date']);
-
-            return $this->apiResponse->created($data, 'product');
-        } catch (ValidationException $e) {
-            return $this->apiResponse->validationFailed($e->getErrors());
-        } catch (\InvalidArgumentException $e) {
-            return $this->apiResponse->error([['message' => $e->getMessage()]]);
-        }
+    ) {
+        parent::__construct($apiResponseUtils, $serializer);
     }
 
-    #[Route('/{id}', methods: ['PUT'], requirements: ['id' => '\d+'])]
-    public function update(int $id, Request $request): JsonResponse
-    {
-        try {
-            $product = $this->productService->updateProduct($id, $request->getContent());
-
-            $data = $this->serializer->serialize($product, ['product_detail', 'date']);
-
-            return $this->apiResponse->updated($data, 'product');
-        } catch (EntityNotFoundException $e) {
-            return $this->apiResponse->notFound('product', ['id' => $id]);
-        } catch (ValidationException $e) {
-            return $this->apiResponse->validationFailed($e->getErrors());
-        }
-    }
-
-    #[Route('/{id}', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function show(int $id): JsonResponse
-    {
-        try {
-            $product = $this->productService->getProduct($id);
-
-            $data = $this->serializer->serialize($product, ['product_detail', 'date']);
-
-            return $this->apiResponse->retrieved($data, 'product');
-        } catch (EntityNotFoundException $e) {
-            return $this->apiResponse->notFound('product', ['id' => $id]);
-        }
-    }
-
-    #[Route('', methods: ['GET'])]
+    /**
+     * Récupérer tous les products
+     */
+    #[Route('', name: 'get_all', methods: ['GET'])]
     public function list(Request $request): JsonResponse
     {
-        $filters = $request->query->all();
-        $result = $this->searchService->searchProducts($filters);
+        $pagination = $this->getPaginationParams($request);
+        $filters = $this->extractFilters($request);
 
-        $result['items'] = $this->serializer->serialize($result['items'], ['product_list']);
+        $result = $this->productService->search(
+            $pagination['page'],
+            $pagination['limit'],
+            $filters
+        );
 
-        return $this->apiResponse->success($result);
+        return $this->listResponse(
+            $result,
+            ['product_list', 'date'],
+            'product',
+            'api_get_all_products'
+        );
     }
 
-    #[Route('/{id}', methods: ['DELETE'], requirements: ['id' => '\d+'])]
+    /**
+     * Récupérer un product
+     */
+    #[Route('/{id}', name: 'get', methods: ['GET'])]
+    public function show(int $id): JsonResponse
+    {
+        $product = $this->productService->findEntityById($id);
+
+        return $this->showResponse(
+            $product,
+            ['product_detail', 'product_list', 'date'],
+            'product'
+        );
+    }
+
+    /**
+     * Création d'un product
+     */
+    #[Route('', name: 'register', methods: ['POST'])]
+    public function create(Request $request): JsonResponse
+    {
+        $data = $this->getJsonData($request);
+
+        $result = $this->productService->create($data);
+
+        return $this->createResponse(
+            $result,
+            ['product_list', 'date'],
+            'product',
+        );
+    }
+
+    /**
+     * Mise à jour d'un product
+     */
+    #[Route('/{id}', name: 'updated', methods: ['PUT'])]
+    public function update(int $id, Request $request): JsonResponse
+    {
+        $data = $this->getJsonData($request);
+
+        $product = $this->productService->update($id, $data);
+
+        return $this->updateResponse(
+            $product,
+            ['product_detail', 'date'],
+            'product'
+        );
+    }
+
+    /**
+     * Supprime un product
+     */
+    #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
     public function delete(int $id): JsonResponse
     {
-        try {
-            $product = $this->productService->deleteProduct($id);
+        $product = $this->productService->delete($id);
 
-            $data = $this->serializer->serialize($product, ['product_detail']);
-
-            return $this->apiResponse->deleted($data, 'product');
-        } catch (EntityNotFoundException $e) {
-            return $this->apiResponse->notFound('product', ['id' => $id]);
-        } catch (\DomainException $e) {
-            return $this->apiResponse->error([['message' => $e->getMessage()]], status: 409);
-        }
+        return $this->deleteResponse(
+            ['id' => $id, 'title' => $product->getTitle()],
+            'product'
+        );
     }
 
-    #[Route('/{id}/toggle-status', methods: ['PATCH'], requirements: ['id' => '\d+'])]
+    /**
+     * Change le statut d'une entité (activation/désactivation).
+     * 
+     * Body: { "isValid": true }  // ou false
+     */
+    #[Route('/{id}/status', name: 'toggle_status', methods: ['PUT', 'PATCH'])]
     public function toggleStatus(int $id, Request $request): JsonResponse
     {
-        try {
-            $data = json_decode($request->getContent(), true);
-            $active = filter_var($data['active'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        $data = $this->getJsonData($request);
 
-            $product = $this->productService->toggleStatus($id, $active);
+        $isValid = $this->getBooleanValue($data, 'isValid');
 
-            $responseData = $this->serializer->serialize($product, ['product_detail']);
+        $product = $this->productService->toogleStatus($id, $isValid);
 
-            return $this->apiResponse->updated($responseData, 'product');
-        } catch (EntityNotFoundException $e) {
-            return $this->apiResponse->notFound('product', ['id' => $id]);
-        }
-    }
-
-    #[Route('/{id}/stock', methods: ['PATCH'], requirements: ['id' => '\d+'])]
-    public function updateStock(int $id, Request $request): JsonResponse
-    {
-        try {
-            $data = json_decode($request->getContent(), true);
-
-            if (!isset($data['stock']) || !is_numeric($data['stock'])) {
-                return $this->apiResponse->error([['message' => 'Stock value is required and must be numeric']]);
-            }
-
-            $product = $this->productService->updateStock($id, (int) $data['stock']);
-
-            $responseData = $this->serializer->serialize($product, ['product_detail']);
-
-            return $this->apiResponse->updated($responseData, 'product');
-        } catch (EntityNotFoundException $e) {
-            return $this->apiResponse->notFound('product', ['id' => $id]);
-        } catch (\InvalidArgumentException $e) {
-            return $this->apiResponse->error([['message' => $e->getMessage()]]);
-        }
-    }
-
-    #[Route('/featured/{siteId}', methods: ['GET'], requirements: ['siteId' => '\d+'])]
-    public function featured(int $siteId, Request $request): JsonResponse
-    {
-        $limit = min(50, max(1, (int) $request->query->get('limit', 10)));
-
-        $products = $this->searchService->getFeaturedProducts($siteId, $limit);
-
-        $data = $this->serializer->serialize($products, ['product_list', 'public_read']);
-
-        return $this->apiResponse->success($data);
+        return $this->statusReponse(
+            data: ['id' => $id, 'title' => $product->getTitle(), 'isValid' => $product->isValid()],
+            entityKey: 'product',
+            isValid: $isValid
+        );
     }
 }

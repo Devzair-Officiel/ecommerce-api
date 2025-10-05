@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\EventSubscriber;
 
-use App\Entity\User;
+use App\Entity\User\User;
 use Lexik\Bundle\JWTAuthenticationBundle\Event\JWTCreatedEvent;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 
@@ -33,6 +33,7 @@ final class JWTEventSubscriber
         // Ajouter l'ID de l'utilisateur dans le payload
         $payload = $event->getData();
         $payload['id'] = $user->getId();
+        $payload['username'] = $user->getUsername();
 
         $event->setData($payload);
     }

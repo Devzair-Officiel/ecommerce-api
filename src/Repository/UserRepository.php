@@ -1,117 +1,118 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Repository;
 
 use App\Entity\User;
 use Doctrine\ORM\QueryBuilder;
-use App\ValueObject\UserSearchCriteria;
 use Doctrine\Persistence\ManagerRegistry;
-use App\Repository\Interface\UserRepositoryInterface;
-use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use App\Repository\Core\AbstractRepository;
+use Symfony\Component\Security\Core\User\PasswordUpgraderInterface;
+use Symfony\Component\Security\Core\Exception\UnsupportedUserException;
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 
-class UserRepository extends ServiceEntityRepository implements UserRepositoryInterface
+class UserRepository extends AbstractRepository implements PasswordUpgraderInterface
 {
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, User::class);
     }
 
-    public function findByCriteria(UserSearchCriteria $criteria): array
+    /**
+     * Used to upgrade (rehash) the user's password automatically over time.
+     */
+    public function upgradePassword(PasswordAuthenticatedUserInterface $user, string $newHashedPassword): void
     {
-        $qb = $this->createQueryBuilder('u');
+        if (!$user instanceof User) {
+            throw new UnsupportedUserException(sprintf('Instances of "%s" are not supported.', $user::class));
+        }
 
-        $this->buildCriteria($qb, $criteria);
-        $this->buildSorting($qb, $criteria);
-        $this->buildPagination($qb, $criteria);
-
-        return $qb->getQuery()->getResult();
+        $user->setPassword($newHashedPassword);
+        $this->getEntityManager()->persist($user);
+        $this->getEntityManager()->flush();
     }
 
-    public function countByCriteria(UserSearchCriteria $criteria): int
+
+    /** Configuration des champs autorisés pour le tri */
+    protected array $sortableFields = [
+        'id',
+        'email',
+        'firstName',
+        'lastName',
+        'createdAt',
+        'isActive'
+    ];
+
+    /** Champs de recherche textuelle */
+    protected array $searchableFields = [
+        'email',
+        'firstName',
+        'lastName'
+    ];
+
+
+    /**
+     * Implémentation de la recherche paginée pour User.
+     */
+    public function findWithPagination(int $page, int $limit, array $filters = []): array
     {
-        $qb = $this->createQueryBuilder('u')
-            ->select('COUNT(u.id)');
+        $qb = $this->createBaseQueryBuilder();
 
-        $this->buildCriteria($qb, $criteria);
+        // Application des filtres génériques (hérités)
+        $this->applyTextSearch($qb, $filters);
+        $this->applySorting($qb, $filters);
+        $this->applyBooleanFilter($qb, $filters, 'isActive', 'isActive');
+        $this->applyDateRangeFilter($qb, $filters, 'createdAt');
 
-        return (int) $qb->getQuery()->getSingleScalarResult();
+        // Filtres spécifiques à User (logique métier)
+        $this->applyUserSpecificFilters($qb, $filters);
+
+        return $this->buildPaginatedResponse($qb, $page, $limit);
     }
 
+    /**
+     * Recherche par email (méthode spécifique).
+     */
     public function findByEmail(string $email): ?User
     {
-        return $this->createQueryBuilder('u')
-            ->where('u.email = :email')
-            ->setParameter('email', $email)
-            ->getQuery()
-            ->getOneOrNullResult();
+        return $this->findOneBy(['email' => $email]);
     }
 
-    public function findActiveUsers(): array
+    /**
+     * Utilisateurs actifs uniquement.
+     */
+    public function findValidUsers(): array
     {
         return $this->createQueryBuilder('u')
-            ->where('u.isActive = true')
-            ->orderBy('u.createdAt', 'DESC')
+            ->where('u.isValid = true')
             ->getQuery()
             ->getResult();
     }
 
-    public function hasActiveOrders(User $user): bool
+    /**
+     * Filtres spécifiques au domaine User.
+     */
+    private function applyUserSpecificFilters(QueryBuilder $qb, array $filters): void
     {
-        return (bool) $this->getEntityManager()
-            ->createQuery(
-                'SELECT COUNT(o.id) 
-                 FROM App\Entity\Order o 
-                 WHERE o.user = :user 
-                 AND o.status IN (:statuses)'
-            )
-            ->setParameter('user', $user)
-            ->setParameter('statuses', ['pending', 'processing', 'shipped'])
-            ->getSingleScalarResult();
-    }
-
-    // === MÉTHODES PRIVÉES ===
-
-    private function buildCriteria(QueryBuilder $qb, UserSearchCriteria $criteria): void
-    {
-        if ($criteria->search) {
-            $qb->andWhere('u.firstName LIKE :search OR u.lastName LIKE :search OR u.email LIKE :search')
-                ->setParameter('search', '%' . $criteria->search . '%');
+        // Filtre par rôles
+        if (isset($filters['roles']) && is_array($filters['roles'])) {
+            $qb->andWhere('JSON_CONTAINS(e.roles, :roles) = 1')
+                ->setParameter('roles', json_encode($filters['roles']));
         }
 
-        if ($criteria->isActive !== null) {
-            $qb->andWhere('u.isActive = :isActive')
-                ->setParameter('isActive', $criteria->isActive);
+        // Filtre par division (relation)
+        if (isset($filters['division_id'])) {
+            $qb->join('e.division', 'd')
+                ->andWhere('d.id = :divisionId')
+                ->setParameter('divisionId', $filters['division_id']);
         }
 
-        if ($criteria->roles) {
-            $conditions = [];
-            foreach ($criteria->roles as $index => $role) {
-                $conditions[] = "JSON_CONTAINS(u.roles, :role{$index}) = 1";
-                $qb->setParameter("role{$index}", json_encode($role));
-            }
-            $qb->andWhere('(' . implode(' OR ', $conditions) . ')');
+        // Filtre par équipe (many-to-many)
+        if (isset($filters['team_id'])) {
+            $qb->join('e.teams', 't')
+                ->andWhere('t.id = :teamId')
+                ->setParameter('teamId', $filters['team_id']);
         }
-
-        if ($criteria->email) {
-            $qb->andWhere('u.email = :email')
-                ->setParameter('email', $criteria->email);
-        }
-    }
-
-    private function buildSorting(QueryBuilder $qb, UserSearchCriteria $criteria): void
-    {
-        $allowedSortFields = ['id', 'email', 'firstName', 'lastName', 'createdAt', 'isActive'];
-
-        if (in_array($criteria->sortBy, $allowedSortFields, true)) {
-            $qb->orderBy('u.' . $criteria->sortBy, $criteria->sortOrder);
-        } else {
-            $qb->orderBy('u.createdAt', 'DESC');
-        }
-    }
-
-    private function buildPagination(QueryBuilder $qb, UserSearchCriteria $criteria): void
-    {
-        $qb->setFirstResult($criteria->offset)
-            ->setMaxResults($criteria->limit);
     }
 }
