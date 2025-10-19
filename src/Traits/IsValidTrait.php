@@ -1,37 +1,56 @@
-<?php 
+<?php
+
+declare(strict_types=1);
 
 namespace App\Traits;
+
+use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Annotation\Groups;
 
+/**
+ * Trait pour la validation métier d'une entité.
+ * 
+ * Usage : Modération, validation par admin, conformité aux règles métier.
+ * 
+ * Exemples :
+ * - Produit en attente de validation admin (isValid = false)
+ * - Review modéré avant publication (isValid = false)
+ * - Commande confirmée par paiement (isValid = true)
+ * 
+ * ⚠️ Ne pas confondre avec :
+ * - Active/Inactive : utiliser ActiveStateTrait (closedAt)
+ * - Suppression : utiliser SoftDeletableTrait (isDeleted)
+ */
 trait IsValidTrait
 {
-    /**
-     * Indique si l'entité est valide.
-     */
-    #[\Doctrine\ORM\Mapping\Column(type: 'boolean', options: ['default' => true])]
-    #[Groups(['user_list'])]
-    private bool $valid = true;
+    #[ORM\Column(type: 'boolean', options: ['default' => true])]
+    #[Groups(['valid'])]
+    private bool $isValid = true;
 
-    /**
-     * Récupère l'état de validité de l'entité.
-     *
-     * @return bool
-     */
     public function isValid(): bool
     {
-        return $this->valid;
+        return $this->isValid;
+    }
+
+    public function setIsValid(bool $isValid): static
+    {
+        $this->isValid = $isValid;
+        return $this;
     }
 
     /**
-     * Définit l'état de validité de l'entité.
-     *
-     * @param bool $valid
-     * @return self
+     * Helper : Valider l'entité
      */
-    public function setValid(bool $valid): self
+    public function validate(): static
     {
-        $this->valid = $valid;
+        return $this->setIsValid(true);
+    }
 
-        return $this;
+    /**
+     * Helper : Invalider l'entité
+     */
+    public function invalidate(): static
+    {
+        return $this->setIsValid(false);
     }
 }

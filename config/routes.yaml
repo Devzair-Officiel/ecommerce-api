@@ -10,5 +10,5 @@ api_login_check:
 
 refresh_token:
     path: /api/v1/token/refresh
-    controller: App\Controller\RefreshTokenController::refresh
+    controller: App\Controller\User\RefreshTokenController::refresh
     methods: [POST]

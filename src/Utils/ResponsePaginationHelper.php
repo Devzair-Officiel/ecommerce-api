@@ -6,7 +6,6 @@ namespace App\Utils;
 
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
-
 /**
  * Helper spécialisé dans la gestion des réponses paginées.
  * 

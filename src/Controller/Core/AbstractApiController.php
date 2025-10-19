@@ -103,7 +103,9 @@ abstract class AbstractApiController extends AbstractController
             return [];
         }
 
-        $serializationContext = $context;
+        $serializationContext = array_merge([
+            'enable_max_depth' => true,  // ✅ Important pour MaxDepth
+        ], $context);
 
         if (!empty($groups)) {
             $serializationContext['groups'] = $groups;
@@ -112,6 +114,24 @@ abstract class AbstractApiController extends AbstractController
         $json = $this->serializer->serialize($data, 'json', $serializationContext);
 
         return json_decode($json, true);
+    }
+
+    /**
+     * Nettoie les superviseurs pour ne garder que id, firstname, lastname.
+     */
+    protected function cleanSupervisors(array &$items): void
+    {
+        foreach ($items as &$item) {
+            if (isset($item['supervisors']) && is_array($item['supervisors'])) {
+                $item['supervisors'] = array_map(function ($supervisor) {
+                    return [
+                        'id' => $supervisor['id'] ?? null,
+                        'firstname' => $supervisor['firstname'] ?? null,
+                        'lastname' => $supervisor['lastname'] ?? null,
+                    ];
+                }, $item['supervisors']);
+            }
+        }
     }
 
     /**
@@ -126,6 +146,9 @@ abstract class AbstractApiController extends AbstractController
     {
         if (isset($result['items'])) {
             $result['items'] = $this->serialize($result['items'], $groups);
+
+            // ✅ Nettoyer automatiquement les superviseurs si présents
+            $this->cleanSupervisors($result['items']);
         }
 
         return $result;
@@ -261,7 +284,7 @@ abstract class AbstractApiController extends AbstractController
     /**
      * Réponse pour le changement de statut d'une entité.
      */
-    protected function statusReponse(mixed $data, string $entityKey, bool $isValid): JsonResponse 
+    protected function statusReponse(mixed $data, string $entityKey, bool $isValid): JsonResponse
     {
         $serialized = $this->serialize($data);
         return $this->apiResponseUtils->statusChanged($serialized, $entityKey, $isValid);

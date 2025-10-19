@@ -96,3 +96,14 @@ validation:
          max_length: "Description cannot exceed {{ limit }} characters"
       template:
          max_length: "Template cannot exceed {{ limit }} characters"
+
+not_blank: "Ce champ ne doit pas être vide."
+email_invalid: "L'adresse email n'est pas valide."
+length_min: "Ce champ doit contenir au moins {{ limit }} caractères."
+length_max: "Ce champ ne doit pas dépasser {{ limit }} caractères."
+positive: "Ce champ doit être un nombre positif."
+type_integer: "Ce champ doit être un nombre entier."
+type_boolean: "Ce champ doit être un booléen (true/false)."
+date_invalid: "La date n'est pas valide."
+choice_invalid: "La valeur '{{ value }}' n'est pas autorisée."
+unique: "Cette valeur est déjà utilisée."

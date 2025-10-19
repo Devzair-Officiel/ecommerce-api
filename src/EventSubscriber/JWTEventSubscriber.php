@@ -33,7 +33,7 @@ final class JWTEventSubscriber
         // Ajouter l'ID de l'utilisateur dans le payload
         $payload = $event->getData();
         $payload['id'] = $user->getId();
-        $payload['username'] = $user->getUsername();
+        $payload['email'] = $user->getEmail();
 
         $event->setData($payload);
     }

@@ -9,9 +9,6 @@ use Symfony\Component\Validator\ConstraintViolationListInterface;
 /**
  * Utilitaire simplifié pour la validation.
  * 
- * SIMPLIFICATION : Suppression de validateConstraint() qui fait doublon
- * avec l'utilisation directe du ValidatorInterface.
- * 
  * Ne garde que le formatage des erreurs qui est utile pour l'API.
  */
 final class ValidationUtils

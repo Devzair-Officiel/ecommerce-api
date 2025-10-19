@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\Core;
 
-use App\Exception\BusinessRuleException;
-use App\Exception\ConflictException;
-use App\Utils\ValidationUtils;
-use App\Service\Core\RelationProcessor;
-use App\Exception\ValidationException;
 use DateTimeImmutable;
+use App\Utils\ValidationUtils;
+use App\Exception\ConflictException;
+use App\Exception\ValidationException;
+use App\Service\Core\RelationProcessor;
+use App\Exception\BusinessRuleException;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Exception\EntityNotFoundException;
-use PhpParser\Node\Expr\Cast\Object_;
 use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
@@ -190,26 +189,30 @@ abstract class AbstractService
         return $this->getRepository()->findWithPagination($page, $limit, $filters);
     }
 
-    public function toogleStatus(int $id, bool $isValid)
+    public function toggleStatus(int $id, bool $isValid)
     {
         $entity = $this->findEntityById($id);
 
         // Verifier que l'entité supporte IsValid
-        if(!method_exists($entity, 'setIsValid')) {
+        if (!method_exists($entity, 'setIsValid')) {
             throw new \BadMethodCallException(
                 sprintf('Entity %s does not support status management', get_class($entity))
             );
         }
 
         $entity->setIsValid($isValid);
-        
-        if($entity->isValid() === true) {
+
+        if ($entity->isValid() === true) {
             $entity->setClosedAt(null);
         } else {
             $entity->setClosedAt(new DateTimeImmutable());
         }
 
         $this->em->flush();
+
+        // Hook Après changement
+        $this->afterStatusChange($entity, $isValid);
+
         return $entity;
     }
 
@@ -223,6 +226,8 @@ abstract class AbstractService
     protected function afterUpdate(object $entity, array $context): void {}
     protected function beforeDelete(object $entity, array $context): void {}
     protected function afterDelete(object $entity, array $context): void {}
+    protected function beforeStatusChange(object $entity, bool $isValid): void {}
+    protected function afterStatusChange(object $entity, bool $isValid): void {}
 
 
     // ===============================================
@@ -240,7 +245,7 @@ abstract class AbstractService
         ];
 
         try {
-            if($existingEntity) {
+            if ($existingEntity) {
                 $context['object_to_populate'] = $existingEntity;
             }
             return $this->serializer->deserialize($json, $this->getEntityClass(), 'json', $context);
@@ -255,7 +260,7 @@ abstract class AbstractService
     {
         $violations = $this->validator->validate($entity, null, $groups);
 
-        if(count($violations) > 0) {
+        if (count($violations) > 0) {
             $errors = ValidationUtils::formatValidationErrors($violations);
             throw new ValidationException($errors);
         }
@@ -287,7 +292,7 @@ abstract class AbstractService
      */
     protected function throwConflictIfExists(?object $existing, string $field, mixed $value): void
     {
-        if($existing) {
+        if ($existing) {
             $entityName = (new \ReflectionClass($this->getEntityClass()))->getShortName();
             throw new ConflictException($entityName, $field, $value);
         }
@@ -300,5 +305,4 @@ abstract class AbstractService
     {
         throw new BusinessRuleException($rule, $message);
     }
-
 }

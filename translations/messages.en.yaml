@@ -31,7 +31,7 @@ token:
 validation:
   email_taken: "This email is already taken."
   json_invalid: "Invalid JSON format."
-  failed: "Validation failed for the field '%field%'."
+  failed: "Les données soumises sont invalides. Veuillez corriger les erreurs."
   invalid_key: "The key '%key%' is not valid"
   not_blank: "This field must not be empty."
 

@@ -73,7 +73,7 @@ abstract class AbstractRepository extends ServiceEntityRepository
         $sortOrder = strtoupper($filters['sortOrder'] ?? 'DESC');
 
         // Validation de l'ordre
-        if(!in_array($sortOrder, ['ASC', 'DESC'], true)) {
+        if (!in_array($sortOrder, ['ASC', 'DESC'], true)) {
             $sortOrder = 'DESC';
         }
 
@@ -91,14 +91,14 @@ abstract class AbstractRepository extends ServiceEntityRepository
      */
     protected function applyTextSearch(QueryBuilder $qb, array $filters): void
     {
-        if(empty($filters['search']) || empty($this->searchableFields)) {
+        if (empty($filters['search']) || empty($this->searchableFields)) {
             return;
         }
 
         $serachTerm = '%' . $filters['search'] . '%';
         $conditions = [];
 
-        foreach($this->searchableFields as $field) {
+        foreach ($this->searchableFields as $field) {
             $conditions[] = $this->defaultalias . '.' . $field . ' LIKE :searchTerm';
         }
 
@@ -106,11 +106,70 @@ abstract class AbstractRepository extends ServiceEntityRepository
     }
 
     /**
+     * Applique des filtres LIKE sur plusieurs champs à partir d'un tableau.
+     * 
+     * @param array $likeableFields Liste des champs sur lesquels appliquer le LIKE
+     */
+    protected function applyMultipleLikeFilters(QueryBuilder $qb, array $filters, array $likeableFields): void
+    {
+        foreach ($likeableFields as $field) {
+            if (!empty($filters[$field])) {
+                $qb->andWhere($this->defaultalias . '.' . $field . ' LIKE :' . $field)
+                    ->setParameter($field, '%' . $filters[$field] . '%');
+            }
+        }
+    }
+
+    /**
+     * Applique des filtres LIKE sur les relations.
+     * 
+     * Configuration format:
+     * [
+     *     'division' => ['relation' => 'division', 'field' => 'name', 'filter_key' => 'division_name'],
+     * ]
+     */
+    protected function applyRelationLikeFilters(QueryBuilder $qb, array $filters, array $relationLikeConfig): void
+    {
+        foreach ($relationLikeConfig as $config) {
+            $filterKey = $config['filter_key'];
+
+            if (empty($filters[$filterKey])) {
+                continue;
+            }
+
+            $relationName = $config['relation'];
+            $field = $config['field'];
+            $alias = $config['alias'] ?? $relationName[0];
+
+            // JOIN si pas déjà fait
+            $joins = $qb->getDQLPart('join');
+            $alreadyJoined = false;
+
+            foreach ($joins as $joinGroup) {
+                foreach ($joinGroup as $join) {
+                    if ($join->getAlias() === $alias) {
+                        $alreadyJoined = true;
+                        break 2;
+                    }
+                }
+            }
+
+            if (!$alreadyJoined) {
+                $qb->join($this->defaultalias . '.' . $relationName, $alias);
+            }
+
+            // Filtre LIKE
+            $qb->andWhere($alias . '.' . $field . ' LIKE :' . $filterKey)
+                ->setParameter($filterKey, '%' . $filters[$filterKey] . '%');
+        }
+    }
+
+    /**
      * Applique un filtre booléen simple.
      */
     protected function applyBooleanFilter(QueryBuilder $qb, array $filters, string $filterKey, string $fildName): void
     {
-        if(!isset($filters[$filterKey])) {
+        if (!isset($filters[$filterKey])) {
             return;
         }
 
@@ -130,12 +189,12 @@ abstract class AbstractRepository extends ServiceEntityRepository
         $toKey = $fieldName . '_to';
 
         if (isset($filters[$fromKey])) {
-            $qb->andWhere($this->defaultAlias . '.' . $fieldName . ' >= :' . $fromKey)
+            $qb->andWhere($this->defaultalias . '.' . $fieldName . ' >= :' . $fromKey)
                 ->setParameter($fromKey, $filters[$fromKey]);
         }
 
         if (isset($filters[$toKey])) {
-            $qb->andWhere($this->defaultAlias . '.' . $fieldName . ' <= :' . $toKey)
+            $qb->andWhere($this->defaultalias . '.' . $fieldName . ' <= :' . $toKey)
                 ->setParameter($toKey, $filters[$toKey]);
         }
     }
@@ -152,19 +211,40 @@ abstract class AbstractRepository extends ServiceEntityRepository
         $values = is_array($filters[$filterKey]) ? $filters[$filterKey] : [$filters[$filterKey]];
 
         if (!empty($values)) {
-            $qb->andWhere($this->defaultAlias . '.' . $fieldName . ' IN (:' . $filterKey . ')')
+            $qb->andWhere($this->defaultalias . '.' . $fieldName . ' IN (:' . $filterKey . ')')
                 ->setParameter($filterKey, $values);
         }
     }
 
     /**
      * Compte le nombre total d'éléments pour une requête donnée.
+     * Gère correctement les GROUP BY.
      */
     protected function countResults(QueryBuilder $qb): int
     {
-        return (int) $qb->select('COUNT(' . $this->defaultalias . ' .id)')
-            ->getQuery()
-            ->getSingleScalarResult();
+        // Vérifier si la requête a un GROUP BY
+        $groupBy = $qb->getDQLPart('groupBy');
+
+        if (!empty($groupBy)) {
+            // Avec GROUP BY : compter les résultats groupés
+            // On clone le QB, on retire le SELECT et on compte les groupes distincts
+            $countQb = clone $qb;
+
+            // Réinitialiser le select
+            $countQb->select('COUNT(DISTINCT ' . $this->defaultalias . '.id)');
+
+            // Supprimer ORDER BY (inutile pour un count)
+            $countQb->resetDQLPart('orderBy');
+
+            return (int) $countQb->getQuery()->getSingleScalarResult();
+        }
+
+        // ✅ Sans GROUP BY : count classique
+        $countQb = clone $qb;
+        $countQb->select('COUNT(' . $this->defaultalias . '.id)');
+        $countQb->resetDQLPart('orderBy');
+
+        return (int) $countQb->getQuery()->getSingleScalarResult();
     }
 
     /**

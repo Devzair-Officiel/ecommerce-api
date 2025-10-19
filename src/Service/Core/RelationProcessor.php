@@ -31,10 +31,10 @@ class RelationProcessor
      * @param array $relationConfig Configuration des relations
      * @param string $operation 'create' ou 'update'
      */
-    public function processEntityRelations(object $entity, array $data, array $relationConfig, string $operation):void
+    public function processEntityRelations(object $entity, array $data, array $relationConfig, string $operation): void
     {
-        foreach($relationConfig as $property => $config) {
-            if(!array_key_exists($property, $data)) {
+        foreach ($relationConfig as $property => $config) {
+            if (!array_key_exists($property, $data)) {
                 continue; // Proprieté non présente dans les données
             }
             $this->processRelation($entity, $property, $data[$property], $config, $operation);

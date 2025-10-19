@@ -21,12 +21,6 @@ trait DateTrait
     #[Groups(['date'])]
     private ?\DateTimeImmutable $updatedAt = null;
 
-    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
-    #[Context([DateTimeNormalizer::FORMAT_KEY => 'd/m/Y'])]
-    #[Groups(['date'])]
-    private ?\DateTimeImmutable $closedAt = null;
-
-
     /**
      * Déclenché juste avant qu’une entité soit insérée en BDD
      * @return void
@@ -74,15 +68,4 @@ trait DateTrait
         return $this;
     }
 
-    public function getClosedAt(): ?\DateTimeImmutable
-    {
-        return $this->closedAt;
-    }
-
-    public function setClosedAt(?\DateTimeImmutable $closedAt): static
-    {
-        $this->closedAt = $closedAt;
-
-        return $this;
-    }
 }
