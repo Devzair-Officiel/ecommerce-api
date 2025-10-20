@@ -1,6 +1,7 @@
 # Entity names
 entity_name:
   user: utilisateur
+  address: adresse
 
 # User messages
 user:
@@ -13,8 +14,70 @@ user:
   unbanned: "L'utilisateur a été débanni avec succès."
   email_verified: "Votre email a été vérifié avec succès."
   verification_email_sent: "Un email de vérification a été envoyé."
+  profile_retrieved: "Profil récupérés avec succès"
+  profile_updated: "Profil modifié avec succès"
+
+auth:
+  reset_email_sent: "Email envoyé avec le lien pour reinitialiser le mot de passe"
+
+# Address messages
+address:
+  set_as_default: "L'adresse a été définie comme adresse par défaut."
+  billing_retrieved: "Adresses de facturation récupérées."
+  shipping_retrieved: "Adresses de livraison récupérées."
 
 # Validation messages
 validation:
   invalid_role: "Le rôle spécifié est invalide."
   required_field: "Le champ '%field%' est requis."
+
+# ============================================
+# MESSAGES GÉNÉRIQUES DES ENTITÉS
+# ============================================
+entity:
+  not_found: "%entity% non trouvé."
+  created: "%entity% créé avec succès."
+  updated: "%entity% mis à jour avec succès."
+  deleted: "%entity% supprimé avec succès."
+  retrieved: "%entity% récupéré avec succès."
+  list_retrieved: "%entity% récupérés avec succès."
+  activated: "%entity% activé avec succès."
+  deactivated: "%entity% désactivé avec succès."
+  deletion_prohibited: "Impossible de supprimer %entity% car des %related_entity% y sont encore rattachés."
+
+# ============================================
+# MESSAGES D'ERREUR GÉNÉRIQUES
+# ============================================
+error:
+  default: "Une erreur s'est produite."
+  invalid_request: "Requête invalide."
+  server_error: "Une erreur inattendue s'est produite."
+  internal: "Erreur interne du serveur."
+  access_denied: "Vous n'avez pas les droits pour accéder à cette ressource."
+  no_file: "Pas de fichier sélectionné."
+  business_rule: "Règle métier violée."
+
+# ============================================
+# MESSAGES DE SUCCÈS
+# ============================================
+success:
+  default: "Opération réussie."
+
+# ============================================
+# AUTHENTIFICATION & TOKENS
+# ============================================
+token:
+  expired: "Votre session a expiré. Veuillez vous reconnecter."
+  invalid: "La session est invalide. Veuillez vérifier vos informations d'authentification."
+  missing: "Le jeton d'authentification est manquant."
+  error: "Une erreur est survenue avec votre jeton d'authentification."
+  failed: "Identifiant incorrect."
+
+# ============================================
+# PAGINATION
+# ============================================
+pagination:
+  invalid_page: "Le numéro de page demandé (%page%) est invalide."
+  invalid_limit: "La limite spécifiée (%value%) est invalide."
+  limit_exceeded: "La limite d'éléments par page ne peut pas dépasser %limit%."
+  page_out_of_range: "La page %page% dépasse le nombre total de pages (%totalPages%)."

@@ -26,6 +26,8 @@ class SiteRepository extends AbstractRepository
     /** Champs pour la recherche textuelle */
     protected array $searchableFields = ['name', 'code', 'domain'];
 
+    protected string $defaultalias = 's';
+
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, Site::class);
@@ -84,7 +86,7 @@ class SiteRepository extends AbstractRepository
         });
 
         if (!empty($validStatuses)) {
-            $qb->andWhere($this->defaultAlias . '.status IN (:statuses)')
+            $qb->andWhere($this->defaultalias . '.status IN (:statuses)')
                 ->setParameter('statuses', $validStatuses);
         }
     }
@@ -98,7 +100,7 @@ class SiteRepository extends AbstractRepository
             return;
         }
 
-        $qb->andWhere($this->defaultAlias . '.currency = :currency')
+        $qb->andWhere($this->defaultalias . '.currency = :currency')
             ->setParameter('currency', strtoupper($filters['currency']));
     }
 
@@ -112,9 +114,9 @@ class SiteRepository extends AbstractRepository
             return;
         }
 
-        $qb->andWhere($this->defaultAlias . '.status = :activeStatus')
-            ->andWhere($this->defaultAlias . '.closedAt IS NULL')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        $qb->andWhere($this->defaultalias . '.status = :activeStatus')
+            ->andWhere($this->defaultalias . '.closedAt IS NULL')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('activeStatus', SiteStatus::ACTIVE->value);
     }
 
@@ -131,9 +133,9 @@ class SiteRepository extends AbstractRepository
      */
     public function findByDomain(string $domain): ?Site
     {
-        return $this->createQueryBuilder($this->defaultAlias)
-            ->where($this->defaultAlias . '.domain = :domain')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        return $this->createQueryBuilder($this->defaultalias)
+            ->where($this->defaultalias . '.domain = :domain')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('domain', strtolower($domain))
             ->getQuery()
             ->getOneOrNullResult();
@@ -147,9 +149,9 @@ class SiteRepository extends AbstractRepository
      */
     public function findByCode(string $code): ?Site
     {
-        return $this->createQueryBuilder($this->defaultAlias)
-            ->where($this->defaultAlias . '.code = :code')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        return $this->createQueryBuilder($this->defaultalias)
+            ->where($this->defaultalias . '.code = :code')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('code', strtoupper($code))
             ->getQuery()
             ->getOneOrNullResult();
@@ -163,12 +165,12 @@ class SiteRepository extends AbstractRepository
      */
     public function findAccessibleSites(): array
     {
-        return $this->createQueryBuilder($this->defaultAlias)
-            ->where($this->defaultAlias . '.status = :status')
-            ->andWhere($this->defaultAlias . '.closedAt IS NULL')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        return $this->createQueryBuilder($this->defaultalias)
+            ->where($this->defaultalias . '.status = :status')
+            ->andWhere($this->defaultalias . '.closedAt IS NULL')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('status', SiteStatus::ACTIVE)
-            ->orderBy($this->defaultAlias . '.name', 'ASC')
+            ->orderBy($this->defaultalias . '.name', 'ASC')
             ->getQuery()
             ->getResult();
     }
@@ -181,11 +183,11 @@ class SiteRepository extends AbstractRepository
      */
     public function countActiveSites(): int
     {
-        return (int) $this->createQueryBuilder($this->defaultAlias)
-            ->select('COUNT(' . $this->defaultAlias . '.id)')
-            ->where($this->defaultAlias . '.status = :status')
-            ->andWhere($this->defaultAlias . '.closedAt IS NULL')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        return (int) $this->createQueryBuilder($this->defaultalias)
+            ->select('COUNT(' . $this->defaultalias . '.id)')
+            ->where($this->defaultalias . '.status = :status')
+            ->andWhere($this->defaultalias . '.closedAt IS NULL')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('status', SiteStatus::ACTIVE)
             ->getQuery()
             ->getSingleScalarResult();
@@ -205,14 +207,14 @@ class SiteRepository extends AbstractRepository
      */
     public function isDomainTaken(string $domain, ?int $excludeId = null): bool
     {
-        $qb = $this->createQueryBuilder($this->defaultAlias)
-            ->select('COUNT(' . $this->defaultAlias . '.id)')
-            ->where($this->defaultAlias . '.domain = :domain')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        $qb = $this->createQueryBuilder($this->defaultalias)
+            ->select('COUNT(' . $this->defaultalias . '.id)')
+            ->where($this->defaultalias . '.domain = :domain')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('domain', strtolower($domain));
 
         if ($excludeId !== null) {
-            $qb->andWhere($this->defaultAlias . '.id != :excludeId')
+            $qb->andWhere($this->defaultalias . '.id != :excludeId')
                 ->setParameter('excludeId', $excludeId);
         }
 
@@ -228,14 +230,14 @@ class SiteRepository extends AbstractRepository
      */
     public function isCodeTaken(string $code, ?int $excludeId = null): bool
     {
-        $qb = $this->createQueryBuilder($this->defaultAlias)
-            ->select('COUNT(' . $this->defaultAlias . '.id)')
-            ->where($this->defaultAlias . '.code = :code')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        $qb = $this->createQueryBuilder($this->defaultalias)
+            ->select('COUNT(' . $this->defaultalias . '.id)')
+            ->where($this->defaultalias . '.code = :code')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('code', strtoupper($code));
 
         if ($excludeId !== null) {
-            $qb->andWhere($this->defaultAlias . '.id != :excludeId')
+            $qb->andWhere($this->defaultalias . '.id != :excludeId')
                 ->setParameter('excludeId', $excludeId);
         }
 
@@ -251,11 +253,11 @@ class SiteRepository extends AbstractRepository
      */
     public function findByCurrency(string $currency): array
     {
-        return $this->createQueryBuilder($this->defaultAlias)
-            ->where($this->defaultAlias . '.currency = :currency')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        return $this->createQueryBuilder($this->defaultalias)
+            ->where($this->defaultalias . '.currency = :currency')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('currency', strtoupper($currency))
-            ->orderBy($this->defaultAlias . '.name', 'ASC')
+            ->orderBy($this->defaultalias . '.name', 'ASC')
             ->getQuery()
             ->getResult();
     }
@@ -269,11 +271,11 @@ class SiteRepository extends AbstractRepository
      */
     public function findByLocale(string $locale): array
     {
-        return $this->createQueryBuilder($this->defaultAlias)
-            ->where('JSON_CONTAINS(' . $this->defaultAlias . '.locales, :locale) = 1')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        return $this->createQueryBuilder($this->defaultalias)
+            ->where('JSON_CONTAINS(' . $this->defaultalias . '.locales, :locale) = 1')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('locale', json_encode($locale))
-            ->orderBy($this->defaultAlias . '.name', 'ASC')
+            ->orderBy($this->defaultalias . '.name', 'ASC')
             ->getQuery()
             ->getResult();
     }

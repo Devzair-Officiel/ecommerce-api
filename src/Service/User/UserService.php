@@ -250,21 +250,33 @@ class UserService extends AbstractService
      */
     public function changePassword(int $id, string $newPlainPassword): User
     {
+        /** @var User $user */
         $user = $this->findEntityById($id);
-        $user->setPlainPassword($newPlainPassword);
 
-        // Validation avec groupe 'user:password'
+        // 1) Valider avec le groupe 'user:password'
+        $user->setPlainPassword($newPlainPassword);
         $violations = $this->validator->validate($user, null, ['user:password']);
         if (count($violations) > 0) {
             $errors = ValidationUtils::formatValidationErrors($violations);
             throw new ValidationException($errors);
         }
 
-        // Le hashage sera fait automatiquement par UserPasswordSubscriber avant flush
+        // 2) Hasher et enregistrer
+        $hash = $this->passwordHasher->hashPassword($user, $newPlainPassword);
+        $user->setPassword($hash);
+        $user->eraseCredentials();
+
+        // 3) Optionnel : marquer updatedAt pour audit
+        if (method_exists($user, 'setUpdatedAt')) {
+            $user->setUpdatedAt(new \DateTimeImmutable());
+        }
+
         $this->em->flush();
 
-        // Révoquer les refresh tokens invalides (forcer reconnexion)
+        // 4) (optionnel) Révoquer les refresh tokens existants
+        // Minimal : invalide les tokens expirés (déjà présent chez toi)
         $this->refreshTokenManager->revokeAllInvalid();
+        // Si tu as une méthode pour supprimer ceux du user, utilise-la ici.
 
         return $user;
     }

@@ -1,114 +1,158 @@
 <?php
 
-/**
- * Pour un e-commerce, les clients ont besoin de plusieurs adresses : livraison, facturation, parfois différentes selon les commandes.
- * Address sépare cette logique de User pour plus de flexibilité.
- */
+declare(strict_types=1);
 
-namespace App\Entity;
+namespace App\Entity\User;
 
-use App\Entity\User\User;
+use App\Enum\User\AddressType;
+use App\Repository\User\AddressRepository;
 use App\Traits\DateTrait;
+use App\Traits\SoftDeletableTrait;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Annotation\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
-#[ORM\Entity(repositoryClass: "App\Repository\AddressRepository")]
+/**
+ * Address : Adresses de livraison et facturation.
+ * 
+ * Responsabilités :
+ * - Stockage des coordonnées complètes
+ * - Réutilisation pour plusieurs commandes
+ * - Validation selon le pays (code postal, format...)
+ * - Adresse par défaut par utilisateur
+ * 
+ * Relations :
+ * - ManyToOne avec User (un utilisateur a plusieurs adresses)
+ */
+#[ORM\Entity(repositoryClass: AddressRepository::class)]
 #[ORM\HasLifecycleCallbacks]
-#[ORM\Index(columns: ['user_id', 'type'], name: 'idx_address_user_type')]
-#[ORM\Index(columns: ['user_id', 'is_default'], name: 'idx_address_user_default')]
 class Address
 {
     use DateTrait;
-
-    public const TYPE_BILLING = 'billing';
-    public const TYPE_SHIPPING = 'shipping';
+    use SoftDeletableTrait;
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
-    #[ORM\Column]
-    #[Groups(['address_list', 'address_detail', 'user_detail', 'order_detail'])]
+    #[ORM\Column(type: 'integer')]
+    #[Groups(['address:read', 'address:list'])]
     private ?int $id = null;
 
-    #[ORM\ManyToOne(targetEntity: User::class, inversedBy: 'addresses')]
-    #[ORM\JoinColumn(nullable: false)]
-    #[Assert\NotNull(message: "validation.address.user.required")]
+    /**
+     * Utilisateur propriétaire de l'adresse.
+     */
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
+    #[Groups(['address:read:admin'])]
     private ?User $user = null;
 
-    #[ORM\Column(length: 20)]
-    #[Groups(['address_list', 'address_detail', 'user_detail', 'order_detail'])]
-    #[Assert\NotBlank(message: "validation.address.type.required")]
-    #[Assert\Choice(choices: [self::TYPE_BILLING, self::TYPE_SHIPPING], message: "validation.address.type.invalid")]
-    private ?string $type = null;
+    /**
+     * Type d'adresse (facturation, livraison, les deux).
+     */
+    #[ORM\Column(type: 'string', enumType: AddressType::class)]
+    #[Groups(['address:read', 'address:list', 'address:write'])]
+    private AddressType $type = AddressType::BOTH;
 
-    #[ORM\Column(length: 100, nullable: true)]
-    #[Groups(['address_detail', 'user_detail', 'order_detail'])]
-    #[Assert\Length(max: 100, maxMessage: "validation.address.company.max_length")]
+    /**
+     * Nom complet du destinataire.
+     */
+    #[ORM\Column(type: 'string', length: 255)]
+    #[Assert\NotBlank(message: 'Le nom complet est obligatoire.')]
+    #[Assert\Length(max: 255)]
+    #[Groups(['address:read', 'address:list', 'address:write'])]
+    private ?string $fullName = null;
+
+    /**
+     * Société (optionnel, pour adresses professionnelles).
+     */
+    #[ORM\Column(type: 'string', length: 255, nullable: true)]
+    #[Assert\Length(max: 255)]
+    #[Groups(['address:read', 'address:list', 'address:write'])]
     private ?string $company = null;
 
-    #[ORM\Column(length: 100)]
-    #[Groups(['address_detail', 'user_detail', 'order_detail'])]
-    #[Assert\NotBlank(message: "validation.address.first_name.required")]
-    #[Assert\Length(max: 100, maxMessage: "validation.address.first_name.max_length")]
-    private ?string $firstName = null;
-
-    #[ORM\Column(length: 100)]
-    #[Groups(['address_detail', 'user_detail', 'order_detail'])]
-    #[Assert\NotBlank(message: "validation.address.last_name.required")]
-    #[Assert\Length(max: 100, maxMessage: "validation.address.last_name.max_length")]
-    private ?string $lastName = null;
-
-    #[ORM\Column(length: 255)]
-    #[Groups(['address_detail', 'user_detail', 'order_detail'])]
-    #[Assert\NotBlank(message: "validation.address.street.required")]
-    #[Assert\Length(max: 255, maxMessage: "validation.address.street.max_length")]
+    /**
+     * Numéro et nom de rue.
+     */
+    #[ORM\Column(type: 'string', length: 255)]
+    #[Assert\NotBlank(message: 'La rue est obligatoire.')]
+    #[Assert\Length(max: 255)]
+    #[Groups(['address:read', 'address:list', 'address:write'])]
     private ?string $street = null;
 
-    #[ORM\Column(length: 100, nullable: true)]
-    #[Groups(['address_detail', 'user_detail', 'order_detail'])]
-    #[Assert\Length(max: 100, maxMessage: "validation.address.street_complement.max_length")]
-    private ?string $streetComplement = null;
+    /**
+     * Complément d'adresse (bâtiment, appartement, etc.).
+     */
+    #[ORM\Column(type: 'string', length: 255, nullable: true)]
+    #[Assert\Length(max: 255)]
+    #[Groups(['address:read', 'address:list', 'address:write'])]
+    private ?string $additionalAddress = null;
 
-    #[ORM\Column(length: 10)]
-    #[Groups(['address_detail', 'user_detail', 'order_detail'])]
-    #[Assert\NotBlank(message: "validation.address.zip_code.required")]
-    #[Assert\Length(max: 10, maxMessage: "validation.address.zip_code.max_length")]
-    #[Assert\Regex(pattern: "/^[0-9A-Z\s\-]+$/i", message: "validation.address.zip_code.format")]
-    private ?string $zipCode = null;
+    /**
+     * Code postal.
+     */
+    #[ORM\Column(type: 'string', length: 20)]
+    #[Assert\NotBlank(message: 'Le code postal est obligatoire.')]
+    #[Assert\Length(max: 20)]
+    #[Groups(['address:read', 'address:list', 'address:write'])]
+    private ?string $postalCode = null;
 
-    #[ORM\Column(length: 100)]
-    #[Groups(['address_detail', 'user_detail', 'order_detail'])]
-    #[Assert\NotBlank(message: "validation.address.city.required")]
-    #[Assert\Length(max: 100, maxMessage: "validation.address.city.max_length")]
+    /**
+     * Ville.
+     */
+    #[ORM\Column(type: 'string', length: 255)]
+    #[Assert\NotBlank(message: 'La ville est obligatoire.')]
+    #[Assert\Length(max: 255)]
+    #[Groups(['address:read', 'address:list', 'address:write'])]
     private ?string $city = null;
 
-    #[ORM\Column(length: 100, nullable: true)]
-    #[Groups(['address_detail', 'user_detail', 'order_detail'])]
-    #[Assert\Length(max: 100, maxMessage: "validation.address.state.max_length")]
-    private ?string $state = null;
+    /**
+     * Code pays ISO 3166-1 alpha-2 (FR, BE, CH, etc.).
+     */
+    #[ORM\Column(type: 'string', length: 2)]
+    #[Assert\NotBlank(message: 'Le pays est obligatoire.')]
+    #[Assert\Country]
+    #[Groups(['address:read', 'address:list', 'address:write'])]
+    private string $countryCode = 'FR';
 
-    #[ORM\Column(length: 3)]
-    #[Groups(['address_detail', 'user_detail', 'order_detail'])]
-    #[Assert\NotBlank(message: "validation.address.country.required")]
-    #[Assert\Country(message: "validation.address.country.invalid")]
-    private ?string $country = null;
-
-    #[ORM\Column(length: 20, nullable: true)]
-    #[Groups(['address_detail', 'user_detail', 'order_detail'])]
-    #[Assert\Length(max: 20, maxMessage: "validation.address.phone.max_length")]
-    #[Assert\Regex(pattern: "/^[\+]?[0-9\s\-\(\)\.]+$/", message: "validation.address.phone.format")]
+    /**
+     * Téléphone de contact.
+     */
+    #[ORM\Column(type: 'string', length: 20)]
+    #[Assert\NotBlank(message: 'Le téléphone est obligatoire.')]
+    #[Assert\Length(max: 20)]
+    #[Assert\Regex(
+        pattern: '/^[\d\s\+\-\(\)]+$/',
+        message: 'Le numéro de téléphone contient des caractères invalides.'
+    )]
+    #[Groups(['address:read', 'address:list', 'address:write'])]
     private ?string $phone = null;
 
-    #[ORM\Column]
-    #[Groups(['address_list', 'admin_read'])]
+    /**
+     * Adresse par défaut de l'utilisateur.
+     * Un seul true par utilisateur.
+     */
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    #[Groups(['address:read', 'address:list', 'address:write'])]
     private bool $isDefault = false;
 
-    #[ORM\Column(type: 'text', nullable: true)]
-    #[Groups(['address_detail', 'admin_read'])]
-    #[Assert\Length(max: 500, maxMessage: "validation.address.notes.max_length")]
-    private ?string $notes = null;
+    /**
+     * Label personnalisé (ex: "Maison", "Bureau", "Parents").
+     */
+    #[ORM\Column(type: 'string', length: 50, nullable: true)]
+    #[Assert\Length(max: 50)]
+    #[Groups(['address:read', 'address:list', 'address:write'])]
+    private ?string $label = null;
 
-    // === GETTERS/SETTERS BASIQUES ===
+    /**
+     * Instructions de livraison (code portail, étage...).
+     */
+    #[ORM\Column(type: 'text', nullable: true)]
+    #[Assert\Length(max: 1000)]
+    #[Groups(['address:read', 'address:write'])]
+    private ?string $deliveryInstructions = null;
+
+    // ===============================================
+    // GETTERS & SETTERS
+    // ===============================================
 
     public function getId(): ?int
     {
@@ -120,24 +164,31 @@ class Address
         return $this->user;
     }
 
-    public function setUser(?User $user): static
+    public function setUser(User $user): static
     {
         $this->user = $user;
         return $this;
     }
 
-    public function getType(): ?string
+    public function getType(): AddressType
     {
         return $this->type;
     }
 
-    // Définit le type d'adresse avec validation
-    public function setType(?string $type): static
+    public function setType(AddressType $type): static
     {
-        if ($type && !in_array($type, [self::TYPE_BILLING, self::TYPE_SHIPPING])) {
-            throw new \InvalidArgumentException('validation.address.type.invalid_value');
-        }
         $this->type = $type;
+        return $this;
+    }
+
+    public function getFullName(): ?string
+    {
+        return $this->fullName;
+    }
+
+    public function setFullName(string $fullName): static
+    {
+        $this->fullName = $fullName;
         return $this;
     }
 
@@ -146,34 +197,9 @@ class Address
         return $this->company;
     }
 
-    // Stocke le nom de l'entreprise (optionnel)
     public function setCompany(?string $company): static
     {
-        $this->company = $company ? trim($company) : null;
-        return $this;
-    }
-
-    public function getFirstName(): ?string
-    {
-        return $this->firstName;
-    }
-
-    // Nettoie et stocke le prénom
-    public function setFirstName(?string $firstName): static
-    {
-        $this->firstName = $firstName ? trim($firstName) : null;
-        return $this;
-    }
-
-    public function getLastName(): ?string
-    {
-        return $this->lastName;
-    }
-
-    // Nettoie et stocke le nom de famille
-    public function setLastName(?string $lastName): static
-    {
-        $this->lastName = $lastName ? trim($lastName) : null;
+        $this->company = $company;
         return $this;
     }
 
@@ -182,34 +208,31 @@ class Address
         return $this->street;
     }
 
-    // Nettoie et stocke l'adresse principale
-    public function setStreet(?string $street): static
+    public function setStreet(string $street): static
     {
-        $this->street = $street ? trim($street) : null;
+        $this->street = $street;
         return $this;
     }
 
-    public function getStreetComplement(): ?string
+    public function getAdditionalAddress(): ?string
     {
-        return $this->streetComplement;
+        return $this->additionalAddress;
     }
 
-    // Stocke le complément d'adresse (appartement, étage, etc.)
-    public function setStreetComplement(?string $streetComplement): static
+    public function setAdditionalAddress(?string $additionalAddress): static
     {
-        $this->streetComplement = $streetComplement ? trim($streetComplement) : null;
+        $this->additionalAddress = $additionalAddress;
         return $this;
     }
 
-    public function getZipCode(): ?string
+    public function getPostalCode(): ?string
     {
-        return $this->zipCode;
+        return $this->postalCode;
     }
 
-    // Formate et stocke le code postal
-    public function setZipCode(?string $zipCode): static
+    public function setPostalCode(string $postalCode): static
     {
-        $this->zipCode = $zipCode ? strtoupper(trim($zipCode)) : null;
+        $this->postalCode = $postalCode;
         return $this;
     }
 
@@ -218,34 +241,20 @@ class Address
         return $this->city;
     }
 
-    // Nettoie et stocke la ville
-    public function setCity(?string $city): static
+    public function setCity(string $city): static
     {
-        $this->city = $city ? trim($city) : null;
+        $this->city = $city;
         return $this;
     }
 
-    public function getState(): ?string
+    public function getCountryCode(): string
     {
-        return $this->state;
+        return $this->countryCode;
     }
 
-    // Stocke l'état/région (pour certains pays)
-    public function setState(?string $state): static
+    public function setCountryCode(string $countryCode): static
     {
-        $this->state = $state ? trim($state) : null;
-        return $this;
-    }
-
-    public function getCountry(): ?string
-    {
-        return $this->country;
-    }
-
-    // Stocke le code pays ISO (FR, US, etc.)
-    public function setCountry(?string $country): static
-    {
-        $this->country = $country ? strtoupper(trim($country)) : null;
+        $this->countryCode = strtoupper($countryCode);
         return $this;
     }
 
@@ -254,10 +263,9 @@ class Address
         return $this->phone;
     }
 
-    // Nettoie et stocke le numéro de téléphone
-    public function setPhone(?string $phone): static
+    public function setPhone(string $phone): static
     {
-        $this->phone = $phone ? trim($phone) : null;
+        $this->phone = $phone;
         return $this;
     }
 
@@ -272,188 +280,121 @@ class Address
         return $this;
     }
 
-    public function getNotes(): ?string
+    public function getLabel(): ?string
     {
-        return $this->notes;
+        return $this->label;
     }
 
-    // Stocke des notes de livraison (digicode, instructions, etc.)
-    public function setNotes(?string $notes): static
+    public function setLabel(?string $label): static
     {
-        $this->notes = $notes ? trim($notes) : null;
+        $this->label = $label;
         return $this;
     }
 
-    // === MÉTHODES D'ÉTAT SIMPLE (conformes SOLID - lecture seule de propriétés) ===
-
-    // Vérifie si c'est une adresse de facturation
-    #[Groups(['address_detail'])]
-    public function isBillingAddress(): bool
+    public function getDeliveryInstructions(): ?string
     {
-        return $this->type === self::TYPE_BILLING;
+        return $this->deliveryInstructions;
     }
 
-    // Vérifie si c'est une adresse de livraison
-    #[Groups(['address_detail'])]
-    public function isShippingAddress(): bool
+    public function setDeliveryInstructions(?string $deliveryInstructions): static
     {
-        return $this->type === self::TYPE_SHIPPING;
+        $this->deliveryInstructions = $deliveryInstructions;
+        return $this;
     }
 
-    // Vérifie si l'adresse a un nom d'entreprise
-    #[Groups(['address_detail'])]
-    public function hasCompany(): bool
+    // ===============================================
+    // HELPERS MÉTIER
+    // ===============================================
+
+    /**
+     * Retourne l'adresse formatée sur plusieurs lignes.
+     */
+    public function getFormattedAddress(): string
     {
-        return !empty($this->company);
+        $lines = [];
+
+        if ($this->fullName) {
+            $lines[] = $this->fullName;
+        }
+
+        if ($this->company) {
+            $lines[] = $this->company;
+        }
+
+        if ($this->street) {
+            $lines[] = $this->street;
+        }
+
+        if ($this->additionalAddress) {
+            $lines[] = $this->additionalAddress;
+        }
+
+        if ($this->postalCode && $this->city) {
+            $lines[] = $this->postalCode . ' ' . $this->city;
+        }
+
+        if ($this->countryCode) {
+            $lines[] = strtoupper($this->countryCode);
+        }
+
+        return implode("\n", $lines);
     }
 
-    // Vérifie si l'adresse a un complément
-    #[Groups(['address_detail'])]
-    public function hasStreetComplement(): bool
-    {
-        return !empty($this->streetComplement);
-    }
-
-    // Vérifie si l'adresse a un état/région
-    #[Groups(['address_detail'])]
-    public function hasState(): bool
-    {
-        return !empty($this->state);
-    }
-
-    // Vérifie si l'adresse a un téléphone
-    #[Groups(['address_detail'])]
-    public function hasPhone(): bool
-    {
-        return !empty($this->phone);
-    }
-
-    // Vérifie si l'adresse a des notes
-    #[Groups(['address_detail'])]
-    public function hasNotes(): bool
-    {
-        return !empty($this->notes);
-    }
-
-    // === MÉTHODES DE FORMATAGE SIMPLE ===
-
-    // Retourne le nom complet (prénom + nom)
-    #[Groups(['address_detail', 'user_detail', 'order_detail'])]
-    public function getFullName(): string
-    {
-        return trim(($this->firstName ?? '') . ' ' . ($this->lastName ?? ''));
-    }
-
-    // Retourne l'adresse complète sur une ligne
-    #[Groups(['address_detail', 'order_detail'])]
-    public function getFullAddress(): string
+    /**
+     * Retourne l'adresse formatée sur une seule ligne.
+     */
+    public function getFormattedAddressOneLine(): string
     {
         $parts = array_filter([
             $this->street,
-            $this->streetComplement,
-            $this->zipCode . ' ' . $this->city,
-            $this->state,
-            $this->country
+            $this->additionalAddress,
+            $this->postalCode,
+            $this->city,
+            strtoupper($this->countryCode)
         ]);
 
         return implode(', ', $parts);
     }
 
-    // Retourne l'adresse formatée pour affichage (multilignes)
-    #[Groups(['address_detail', 'order_detail'])]
-    public function getFormattedAddress(): array
+    /**
+     * Vérifie si l'adresse peut être utilisée pour la facturation.
+     */
+    public function canBeUsedForBilling(): bool
     {
-        $lines = [];
-
-        // Nom et entreprise
-        if ($this->hasCompany()) {
-            $lines[] = $this->company;
-        }
-        $lines[] = $this->getFullName();
-
-        // Adresse
-        $lines[] = $this->street;
-        if ($this->hasStreetComplement()) {
-            $lines[] = $this->streetComplement;
-        }
-
-        // Ville et code postal
-        $cityLine = $this->zipCode . ' ' . $this->city;
-        if ($this->hasState()) {
-            $cityLine .= ', ' . $this->state;
-        }
-        $lines[] = $cityLine;
-
-        // Pays
-        $lines[] = $this->country;
-
-        return array_filter($lines);
+        return $this->type->canBeUsedForBilling();
     }
 
-    // Retourne une version courte pour les listes
-    #[Groups(['address_list'])]
-    public function getShortAddress(): string
+    /**
+     * Vérifie si l'adresse peut être utilisée pour la livraison.
+     */
+    public function canBeUsedForShipping(): bool
     {
-        return $this->street . ', ' . $this->zipCode . ' ' . $this->city;
+        return $this->type->canBeUsedForShipping();
     }
 
-    // === MÉTHODES D'ACTION MÉTIER (conformes SOLID - actions simples sur l'état) ===
-
-    // Définit cette adresse comme par défaut
-    public function setAsDefault(): static
+    /**
+     * Retourne le nom du pays (nécessite extension intl PHP).
+     */
+    public function getCountryName(string $locale = 'fr'): string
     {
-        $this->isDefault = true;
-        return $this;
+        return \Locale::getDisplayRegion('-' . $this->countryCode, $locale);
     }
 
-    // Retire le statut par défaut
-    public function removeDefault(): static
+    /**
+     * Clone l'adresse (pour snapshot dans Order).
+     */
+    public function toArray(): array
     {
-        $this->isDefault = false;
-        return $this;
-    }
-
-    // Convertit en adresse de facturation
-    public function convertToBilling(): static
-    {
-        $this->type = self::TYPE_BILLING;
-        return $this;
-    }
-
-    // Convertit en adresse de livraison
-    public function convertToShipping(): static
-    {
-        $this->type = self::TYPE_SHIPPING;
-        return $this;
-    }
-
-    // Copie les données d'une autre adresse (pour dupliquer)
-    public function copyFrom(Address $address): static
-    {
-        $this->company = $address->getCompany();
-        $this->firstName = $address->getFirstName();
-        $this->lastName = $address->getLastName();
-        $this->street = $address->getStreet();
-        $this->streetComplement = $address->getStreetComplement();
-        $this->zipCode = $address->getZipCode();
-        $this->city = $address->getCity();
-        $this->state = $address->getState();
-        $this->country = $address->getCountry();
-        $this->phone = $address->getPhone();
-        $this->notes = $address->getNotes();
-        return $this;
-    }
-
-    // Efface toutes les données sensibles (RGPD)
-    public function anonymize(): static
-    {
-        $this->company = null;
-        $this->firstName = 'Utilisateur';
-        $this->lastName = 'Anonyme';
-        $this->street = 'Adresse supprimée';
-        $this->streetComplement = null;
-        $this->phone = null;
-        $this->notes = null;
-        return $this;
+        return [
+            'fullName' => $this->fullName,
+            'company' => $this->company,
+            'street' => $this->street,
+            'additionalAddress' => $this->additionalAddress,
+            'postalCode' => $this->postalCode,
+            'city' => $this->city,
+            'countryCode' => $this->countryCode,
+            'phone' => $this->phone,
+            'deliveryInstructions' => $this->deliveryInstructions,
+        ];
     }
 }

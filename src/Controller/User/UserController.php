@@ -4,15 +4,17 @@ declare(strict_types=1);
 
 namespace App\Controller\User;
 
-use App\Controller\Core\AbstractApiController;
-use App\Exception\ValidationException;
-use App\Service\User\UserService;
+use App\Entity\Site\Site;
 use App\Utils\ApiResponseUtils;
-use Symfony\Component\HttpFoundation\JsonResponse;
+use App\Service\User\UserService;
+use App\Exception\ValidationException;
+use App\Repository\Site\SiteRepository;
 use Symfony\Component\HttpFoundation\Request;
+use App\Controller\Core\AbstractApiController;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * Contrôleur pour la gestion des utilisateurs via API REST.
@@ -29,7 +31,8 @@ class UserController extends AbstractApiController
     public function __construct(
         ApiResponseUtils $apiResponseUtils,
         SerializerInterface $serializer,
-        private readonly UserService $userService
+        private readonly UserService $userService,
+        private readonly SiteRepository $siteRepository
     ) {
         parent::__construct($apiResponseUtils, $serializer);
     }
@@ -309,19 +312,36 @@ class UserController extends AbstractApiController
     /**
      * Récupère le site depuis la requête (multi-tenant).
      * 
-     * TODO: Implémenter la détection automatique du site :
+     * TODO: Implémenter la détection automatique du site selon votre stratégie :
      * - Depuis le domaine (Header Host)
-     * - Depuis un paramètre site_id
-     * - Depuis un token JWT (claim site_id)
-     * 
-     * Pour l'instant, retourne null (à implémenter).
+     * - Depuis un header X-Site-Code
+     * - Depuis un paramètre dans le body
      */
-    private function getSiteFromRequest(Request $request): ?\App\Entity\Site\Site
+    private function getSiteFromRequest(Request $request): Site
     {
-        // TODO: Implémenter la récupération du site
-        // Exemple : $domain = $request->getHost();
-        // return $siteRepository->findByDomain($domain);
+        // Option 1 : Depuis le domaine (recommandé en production)
+        // $domain = $request->getHost();
+        // $site = $this->siteRepository->findByDomain($domain);
 
-        throw new \LogicException('Site resolution not implemented yet. Please implement getSiteFromRequest().');
+        // Option 2 : Depuis un header custom
+        // $siteCode = $request->headers->get('X-Site-Code');
+        // $site = $this->siteRepository->findByCode($siteCode);
+
+        // Option 3 : Depuis le body (temporaire pour développement)
+        $data = $this->getJsonData($request);
+        if (isset($data['siteCode'])) {
+            $site = $this->siteRepository->findByCode($data['siteCode']);
+            if ($site) {
+                return $site;
+            }
+        }
+
+        // Fallback : Retourner le premier site (pour développement uniquement)
+        $sites = $this->siteRepository->findAccessibleSites();
+        if (empty($sites)) {
+            throw new \RuntimeException('Aucun site disponible. Veuillez créer un site avant de vous inscrire.');
+        }
+
+        return $sites[0]; // Retourne le premier site actif
     }
 }

@@ -62,7 +62,7 @@ class UserRepository extends AbstractRepository implements PasswordUpgraderInter
             return;
         }
 
-        $qb->andWhere($this->defaultAlias . '.site = :siteId')
+        $qb->andWhere($this->defaultalias . '.site = :siteId')
             ->setParameter('siteId', $filters['site_id']);
     }
 
@@ -72,7 +72,7 @@ class UserRepository extends AbstractRepository implements PasswordUpgraderInter
             return;
         }
 
-        $qb->andWhere('JSON_CONTAINS(' . $this->defaultAlias . '.roles, :role) = 1')
+        $qb->andWhere('JSON_CONTAINS(' . $this->defaultalias . '.roles, :role) = 1')
             ->setParameter('role', json_encode($filters['role']));
     }
 
@@ -83,7 +83,7 @@ class UserRepository extends AbstractRepository implements PasswordUpgraderInter
         }
 
         $isVerified = filter_var($filters['is_verified'], FILTER_VALIDATE_BOOLEAN);
-        $qb->andWhere($this->defaultAlias . '.isVerified = :isVerified')
+        $qb->andWhere($this->defaultalias . '.isVerified = :isVerified')
             ->setParameter('isVerified', $isVerified);
     }
 
@@ -93,9 +93,9 @@ class UserRepository extends AbstractRepository implements PasswordUpgraderInter
             return;
         }
 
-        $qb->andWhere($this->defaultAlias . '.closedAt IS NULL')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
-            ->andWhere($this->defaultAlias . '.isVerified = true');
+        $qb->andWhere($this->defaultalias . '.closedAt IS NULL')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
+            ->andWhere($this->defaultalias . '.isVerified = true');
     }
 
     // ===============================================
@@ -109,9 +109,9 @@ class UserRepository extends AbstractRepository implements PasswordUpgraderInter
      */
     public function findByEmail(string $email): ?User
     {
-        return $this->createQueryBuilder($this->defaultAlias)
-            ->where($this->defaultAlias . '.email = :email')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        return $this->createQueryBuilder($this->defaultalias)
+            ->where($this->defaultalias . '.email = :email')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('email', strtolower($email))
             ->getQuery()
             ->getOneOrNullResult();
@@ -123,10 +123,10 @@ class UserRepository extends AbstractRepository implements PasswordUpgraderInter
      */
     public function findByEmailAndSite(string $email, Site $site): ?User
     {
-        return $this->createQueryBuilder($this->defaultAlias)
-            ->where($this->defaultAlias . '.email = :email')
-            ->andWhere($this->defaultAlias . '.site = :site')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        return $this->createQueryBuilder($this->defaultalias)
+            ->where($this->defaultalias . '.email = :email')
+            ->andWhere($this->defaultalias . '.site = :site')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('email', strtolower($email))
             ->setParameter('site', $site)
             ->getQuery()
@@ -138,9 +138,9 @@ class UserRepository extends AbstractRepository implements PasswordUpgraderInter
      */
     public function findByVerificationToken(string $token): ?User
     {
-        return $this->createQueryBuilder($this->defaultAlias)
-            ->where($this->defaultAlias . '.verificationToken = :token')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        return $this->createQueryBuilder($this->defaultalias)
+            ->where($this->defaultalias . '.verificationToken = :token')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('token', $token)
             ->getQuery()
             ->getOneOrNullResult();
@@ -153,15 +153,15 @@ class UserRepository extends AbstractRepository implements PasswordUpgraderInter
     {
         $adminRoles = array_map(fn($role) => $role->value, UserRole::adminRoles());
 
-        $qb = $this->createQueryBuilder($this->defaultAlias)
-            ->where($this->defaultAlias . '.site = :site')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        $qb = $this->createQueryBuilder($this->defaultalias)
+            ->where($this->defaultalias . '.site = :site')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('site', $site);
 
         // Condition OR pour chaque rôle admin
         $orX = $qb->expr()->orX();
         foreach ($adminRoles as $index => $role) {
-            $orX->add('JSON_CONTAINS(' . $this->defaultAlias . '.roles, :role' . $index . ') = 1');
+            $orX->add('JSON_CONTAINS(' . $this->defaultalias . '.roles, :role' . $index . ') = 1');
             $qb->setParameter('role' . $index, json_encode($role));
         }
         $qb->andWhere($orX);
@@ -174,12 +174,12 @@ class UserRepository extends AbstractRepository implements PasswordUpgraderInter
      */
     public function countActiveBySite(Site $site): int
     {
-        return (int) $this->createQueryBuilder($this->defaultAlias)
-            ->select('COUNT(' . $this->defaultAlias . '.id)')
-            ->where($this->defaultAlias . '.site = :site')
-            ->andWhere($this->defaultAlias . '.closedAt IS NULL')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
-            ->andWhere($this->defaultAlias . '.isVerified = true')
+        return (int) $this->createQueryBuilder($this->defaultalias)
+            ->select('COUNT(' . $this->defaultalias . '.id)')
+            ->where($this->defaultalias . '.site = :site')
+            ->andWhere($this->defaultalias . '.closedAt IS NULL')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
+            ->andWhere($this->defaultalias . '.isVerified = true')
             ->setParameter('site', $site)
             ->getQuery()
             ->getSingleScalarResult();
@@ -190,16 +190,16 @@ class UserRepository extends AbstractRepository implements PasswordUpgraderInter
      */
     public function isEmailTaken(string $email, Site $site, ?int $excludeId = null): bool
     {
-        $qb = $this->createQueryBuilder($this->defaultAlias)
-            ->select('COUNT(' . $this->defaultAlias . '.id)')
-            ->where($this->defaultAlias . '.email = :email')
-            ->andWhere($this->defaultAlias . '.site = :site')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        $qb = $this->createQueryBuilder($this->defaultalias)
+            ->select('COUNT(' . $this->defaultalias . '.id)')
+            ->where($this->defaultalias . '.email = :email')
+            ->andWhere($this->defaultalias . '.site = :site')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('email', strtolower($email))
             ->setParameter('site', $site);
 
         if ($excludeId !== null) {
-            $qb->andWhere($this->defaultAlias . '.id != :excludeId')
+            $qb->andWhere($this->defaultalias . '.id != :excludeId')
                 ->setParameter('excludeId', $excludeId);
         }
 
@@ -213,14 +213,14 @@ class UserRepository extends AbstractRepository implements PasswordUpgraderInter
     {
         $thresholdDate = new \DateTimeImmutable("-{$daysInactive} days");
 
-        $qb = $this->createQueryBuilder($this->defaultAlias)
-            ->where($this->defaultAlias . '.lastLoginAt < :threshold')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
+        $qb = $this->createQueryBuilder($this->defaultalias)
+            ->where($this->defaultalias . '.lastLoginAt < :threshold')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
             ->setParameter('threshold', $thresholdDate)
-            ->orderBy($this->defaultAlias . '.lastLoginAt', 'ASC');
+            ->orderBy($this->defaultalias . '.lastLoginAt', 'ASC');
 
         if ($site !== null) {
-            $qb->andWhere($this->defaultAlias . '.site = :site')
+            $qb->andWhere($this->defaultalias . '.site = :site')
                 ->setParameter('site', $site);
         }
 
@@ -232,14 +232,14 @@ class UserRepository extends AbstractRepository implements PasswordUpgraderInter
      */
     public function findNewsletterSubscribers(?Site $site = null): array
     {
-        $qb = $this->createQueryBuilder($this->defaultAlias)
-            ->where($this->defaultAlias . '.newsletterOptIn = true')
-            ->andWhere($this->defaultAlias . '.isDeleted = false')
-            ->andWhere($this->defaultAlias . '.closedAt IS NULL')
-            ->orderBy($this->defaultAlias . '.email', 'ASC');
+        $qb = $this->createQueryBuilder($this->defaultalias)
+            ->where($this->defaultalias . '.newsletterOptIn = true')
+            ->andWhere($this->defaultalias . '.isDeleted = false')
+            ->andWhere($this->defaultalias . '.closedAt IS NULL')
+            ->orderBy($this->defaultalias . '.email', 'ASC');
 
         if ($site !== null) {
-            $qb->andWhere($this->defaultAlias . '.site = :site')
+            $qb->andWhere($this->defaultalias . '.site = :site')
                 ->setParameter('site', $site);
         }
 

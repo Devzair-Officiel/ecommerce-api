@@ -37,11 +37,11 @@ security:
      # Contrôle d'accès par route
     access_control:
         # Routes publiques (pas de JWT requis)
-        - { path: ^/api/auth/login, roles: PUBLIC_ACCESS }
-        - { path: ^/api/auth/register, roles: PUBLIC_ACCESS }
-        - { path: ^/api/auth/forgot-password, roles: PUBLIC_ACCESS }
-        - { path: ^/api/auth/reset-password, roles: PUBLIC_ACCESS }
-        - { path: ^/api/auth/verify-email, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/login_check, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/register, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/forgot-password, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/reset-password, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/verify-email, roles: PUBLIC_ACCESS }
         
         # Routes publiques catalogue (lecture seule)
         - { path: ^/api/products, roles: PUBLIC_ACCESS, methods: [GET] }
