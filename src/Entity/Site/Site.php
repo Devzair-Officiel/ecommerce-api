@@ -23,7 +23,6 @@ use Symfony\Component\Validator\Constraints as Assert;
  * - Gestion du statut et de l'état actif
  */
 #[ORM\Entity(repositoryClass: SiteRepository::class)]
-#[ORM\Table(name: 'sites')]
 #[ORM\HasLifecycleCallbacks]
 #[UniqueEntity(fields: ['code'], message: 'Ce code site est déjà utilisé.')]
 #[UniqueEntity(fields: ['domain'], message: 'Ce domaine est déjà utilisé.')]
@@ -47,7 +46,7 @@ class Site
     #[Assert\NotBlank(message: 'Le code est obligatoire.')]
     #[Assert\Length(max: 10)]
     #[Assert\Regex(pattern: '/^[A-Z_]+$/', message: 'Le code doit contenir uniquement des majuscules et underscores.')]
-    #[Groups(['site:read', 'site:write'])]
+    #[Groups(['site:read', 'site:write', 'user:list', 'category:read'])]
     private ?string $code = null;
 
     /**

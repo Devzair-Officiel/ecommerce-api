@@ -235,7 +235,7 @@ abstract class AbstractCrudController extends AbstractApiController
      * 
      * Body: { "isValid": true } ou { "isValid": false }
      */
-    public function toggleStatus(int $id, Request $request): JsonResponse
+    public function toogleStatus(int $id, Request $request): JsonResponse
     {
         $data = $this->getJsonData($request);
         $isValid = $this->getBooleanValue($data, 'isValid');
@@ -243,7 +243,7 @@ abstract class AbstractCrudController extends AbstractApiController
         // Hook optionnel pour validation avant changement de statut
         $this->beforeStatusChange($id, $isValid);
 
-        $entity = $this->getService()->toggleStatus($id, $isValid);
+        $entity = $this->getService()->toogleStatus($id, $isValid);
 
         // Hook optionnel pour actions post-changement de statut
         $this->afterStatusChange($entity, $isValid);
@@ -361,7 +361,7 @@ abstract class AbstractCrudController extends AbstractApiController
     }
 
     /**
-     * Construit les données de réponse pour toggleStatus.
+     * Construit les données de réponse pour toogleStatus.
      * Par défaut retourne ['id' => X, 'title' => Y, 'isValid' => bool].
      */
     protected function getStatusResponseData(object $entity, bool $isValid): array

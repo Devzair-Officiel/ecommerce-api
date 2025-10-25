@@ -189,7 +189,7 @@ abstract class AbstractService
         return $this->getRepository()->findWithPagination($page, $limit, $filters);
     }
 
-    public function toggleStatus(int $id, bool $isValid)
+    public function toogleStatus(int $id, bool $isValid)
     {
         $entity = $this->findEntityById($id);
 

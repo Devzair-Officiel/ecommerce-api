@@ -1,5 +1,6 @@
 entity_name:
   user: "User"
+  category: "category"
 
 # Messages Générique
 entity:
@@ -18,6 +19,24 @@ user:
   already_deactivated: "User is already deactivated."
   already_activated: "User is already activated."
 
+
+category:
+  name:
+    food: "Food"
+    honeys: "Honeys"
+    oils: "Oils"
+    syrups: "Syrups"
+    jams: "Jams"
+    teas: "Teas & Infusions"
+    cosmetics: "Cosmetics"
+    face_care: "Face Care"
+    body_care: "Body Care"
+    hair_care: "Hair Care"
+    essential_oils: "Essential Oils"
+    wellness: "Wellness"
+    supplements: "Supplements"
+    herbal_teas: "Herbal Teas"
+    aromatherapy: "Aromatherapy"
 
 # Message lié à l'authentification
 token:

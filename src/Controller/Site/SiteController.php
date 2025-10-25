@@ -84,8 +84,8 @@ class SiteController extends AbstractCrudController
     }
 
     #[Route('/{id}/status', name: 'toggle_status', methods: ['PUT', 'PATCH'])]
-    public function toggleStatus(int $id, Request $request): JsonResponse
+    public function toogleStatus(int $id, Request $request): JsonResponse
     {
-        return parent::toggleStatus($id, $request);
+        return parent::toogleStatus($id, $request);
     }
 }

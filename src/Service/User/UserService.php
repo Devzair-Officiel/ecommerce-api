@@ -340,7 +340,7 @@ class UserService extends AbstractService
      * Active/désactive un utilisateur (toggle status).
      * Utilise ActiveStateTrait (closedAt).
      */
-    public function toggleStatus(int $id, bool $active): User
+    public function toogleStatus(int $id, bool $active): User
     {
         $user = $this->findEntityById($id);
 

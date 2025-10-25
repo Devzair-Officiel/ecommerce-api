@@ -2,6 +2,7 @@
 entity_name:
   user: utilisateur
   address: adresse
+  category: "catégorie"
 
 # User messages
 user:
@@ -17,6 +18,27 @@ user:
   profile_retrieved: "Profil récupérés avec succès"
   profile_updated: "Profil modifié avec succès"
 
+category:
+  reordered: "Catégorie Réorganisé"
+  moved: "Sous-catégorie déplacé vers une catégorie"
+  cloned: "Catégorie cloné vers un autre local"
+  name:
+    food: "Alimentaire"
+    honeys: "Miels"
+    oils: "Huiles"
+    syrups: "Sirops"
+    jams: "Confitures"
+    teas: "Thés & Infusions"
+    cosmetics: "Cosmétiques"
+    face_care: "Soins Visage"
+    body_care: "Soins Corps"
+    hair_care: "Soins Cheveux"
+    essential_oils: "Huiles Essentielles"
+    wellness: "Bien-être"
+    supplements: "Compléments Alimentaires"
+    herbal_teas: "Tisanes"
+    aromatherapy: "Aromathérapie"
+    
 auth:
   reset_email_sent: "Email envoyé avec le lien pour reinitialiser le mot de passe"
 

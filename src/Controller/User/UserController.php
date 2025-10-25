@@ -54,6 +54,9 @@ class UserController extends AbstractApiController
         $pagination = $this->getPaginationParams($request);
         $filters = $this->extractFilters($request);
 
+        $site = $this->getSiteFromRequest($request);
+        $filters['site'] = $site->getId();
+        
         $result = $this->userService->search(
             $pagination['page'],
             $pagination['limit'],
@@ -201,13 +204,13 @@ class UserController extends AbstractApiController
      */
     #[Route('/{id}/status', name: 'toggle_status', methods: ['PATCH'], requirements: ['id' => '\d+'])]
     #[IsGranted('ROLE_ADMIN')]
-    public function toggleStatus(int $id, Request $request): JsonResponse
+    public function toogleStatus(int $id, Request $request): JsonResponse
     {
         $data = $this->getJsonData($request);
 
         $active = $this->getBooleanValue($data, 'active', false);
 
-        $user = $this->userService->toggleStatus($id, $active);
+        $user = $this->userService->toogleStatus($id, $active);
 
         return $this->apiResponseUtils->statusChanged(
             data: ['id' => $id, 'email' => $user->getEmail(), 'active' => $user->isActive()],
