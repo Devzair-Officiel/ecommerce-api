@@ -50,6 +50,7 @@ class ProductRepository extends AbstractRepository
             $qb->leftJoin($this->defaultalias . '.variants', 'v');
         }
 
+        $this->applyMultipleLikeFilters($qb, $filters, $this->searchableFields);
         $this->applyTextSearch($qb, $filters);
         $this->applySiteFilter($qb, $filters);
         $this->applyCategoryFilter($qb, $filters);

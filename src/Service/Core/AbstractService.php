@@ -189,29 +189,27 @@ abstract class AbstractService
         return $this->getRepository()->findWithPagination($page, $limit, $filters);
     }
 
-    public function toogleStatus(int $id, bool $isValid)
+    public function toggleStatus(int $id, bool $isActive)
     {
         $entity = $this->findEntityById($id);
 
-        // Verifier que l'entité supporte IsValid
-        if (!method_exists($entity, 'setIsValid')) {
+        // Vérifie que l'entité supporte bien le système d'activation
+        if (!method_exists($entity, 'activate') || !method_exists($entity, 'deactivate')) {
             throw new \BadMethodCallException(
-                sprintf('Entity %s does not support status management', get_class($entity))
+                sprintf('Entity %s does not support activation management', get_class($entity))
             );
         }
 
-        $entity->setIsValid($isValid);
-
-        if ($entity->isValid() === true) {
-            $entity->setClosedAt(null);
+        if ($isActive) {
+            $entity->activate();
         } else {
-            $entity->setClosedAt(new DateTimeImmutable());
+            $entity->deactivate();
         }
 
         $this->em->flush();
 
         // Hook Après changement
-        $this->afterStatusChange($entity, $isValid);
+        $this->afterStatusChange($entity, $isActive);
 
         return $entity;
     }
@@ -226,8 +224,8 @@ abstract class AbstractService
     protected function afterUpdate(object $entity, array $context): void {}
     protected function beforeDelete(object $entity, array $context): void {}
     protected function afterDelete(object $entity, array $context): void {}
-    protected function beforeStatusChange(object $entity, bool $isValid): void {}
-    protected function afterStatusChange(object $entity, bool $isValid): void {}
+    protected function beforeStatusChange(object $entity, bool $isActive): void {}
+    protected function afterStatusChange(object $entity, bool $isActive): void {}
 
 
     // ===============================================

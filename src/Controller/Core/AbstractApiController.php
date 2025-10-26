@@ -284,10 +284,10 @@ abstract class AbstractApiController extends AbstractController
     /**
      * Réponse pour le changement de statut d'une entité.
      */
-    protected function statusReponse(mixed $data, string $entityKey, bool $isValid): JsonResponse
+    protected function statusReponse(mixed $data, string $entityKey, bool $isActive): JsonResponse
     {
         $serialized = $this->serialize($data);
-        return $this->apiResponseUtils->statusChanged($serialized, $entityKey, $isValid);
+        return $this->apiResponseUtils->statusChanged($serialized, $entityKey, $isActive);
     }
 
     // ===============================================

@@ -32,7 +32,7 @@ use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 #[ORM\Entity(repositoryClass: ProductRepository::class)]
 #[ORM\Index(columns: ['slug', 'site_id', 'locale'], name: 'idx_product_slug_site_locale')]
 #[ORM\Index(columns: ['sku'], name: 'idx_product_sku')]
-#[ORM\UniqueConstraint(name: 'UNIQ_PRODUCT_SKU_SITE', fields: ['sku', 'site'])]
+#[ORM\UniqueConstraint(name: 'UNIQ_PRODUCT_SKU_SITE_LOCALE', fields: ['sku', 'site', 'locale'])]
 #[UniqueEntity(
     fields: ['slug', 'site', 'locale'],
     message: 'Ce slug existe déjà pour ce site et cette langue.'

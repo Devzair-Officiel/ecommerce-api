@@ -233,25 +233,25 @@ abstract class AbstractCrudController extends AbstractApiController
     /**
      * PUT/PATCH /resource/{id}/status - Changer le statut d'activation.
      * 
-     * Body: { "isValid": true } ou { "isValid": false }
+     * Body: { "isActive": true } ou { "isActive": false }
      */
-    public function toogleStatus(int $id, Request $request): JsonResponse
+    public function toggleStatus(int $id, Request $request): JsonResponse
     {
         $data = $this->getJsonData($request);
-        $isValid = $this->getBooleanValue($data, 'isValid');
+        $isActive = $this->getBooleanValue($data, 'isActive');
 
         // Hook optionnel pour validation avant changement de statut
-        $this->beforeStatusChange($id, $isValid);
+        $this->beforeStatusChange($id, $isActive);
 
-        $entity = $this->getService()->toogleStatus($id, $isValid);
+        $entity = $this->getService()->toggleStatus($id, $isActive);
 
         // Hook optionnel pour actions post-changement de statut
-        $this->afterStatusChange($entity, $isValid);
+        $this->afterStatusChange($entity, $isActive);
 
         return $this->statusResponse(
-            $this->getStatusResponseData($entity, $isValid),
+            $this->getStatusResponseData($entity, $isActive),
             $this->getEntityKey(),
-            $isValid
+            $isActive
         );
     }
 
@@ -318,7 +318,7 @@ abstract class AbstractCrudController extends AbstractApiController
     /**
      * Hook appelé avant le changement de statut.
      */
-    protected function beforeStatusChange(int $id, bool $isValid): void
+    protected function beforeStatusChange(int $id, bool $isActive): void
     {
         // Override si nécessaire
     }
@@ -326,7 +326,7 @@ abstract class AbstractCrudController extends AbstractApiController
     /**
      * Hook appelé après le changement de statut.
      */
-    protected function afterStatusChange(object $entity, bool $isValid): void
+    protected function afterStatusChange(object $entity, bool $isActive): void
     {
         // Override si nécessaire
     }
@@ -361,10 +361,10 @@ abstract class AbstractCrudController extends AbstractApiController
     }
 
     /**
-     * Construit les données de réponse pour toogleStatus.
-     * Par défaut retourne ['id' => X, 'title' => Y, 'isValid' => bool].
+     * Construit les données de réponse pour toggleStatus.
+     * Par défaut retourne ['id' => X, 'title' => Y, 'isActive' => bool].
      */
-    protected function getStatusResponseData(object $entity, bool $isValid): array
+    protected function getStatusResponseData(object $entity, bool $isActive): array
     {
         $displayField = $this->getEntityDisplayField();
         $getter = 'get' . ucfirst($displayField);
@@ -372,15 +372,15 @@ abstract class AbstractCrudController extends AbstractApiController
         return [
             'id' => $entity->getId(),
             $displayField => method_exists($entity, $getter) ? $entity->$getter() : null,
-            'isValid' => $isValid
+            'isActive' => $isActive
         ];
     }
 
     /**
      * Méthode helper pour la réponse de changement de statut.
      */
-    protected function statusResponse(array $data, string $entityKey, bool $isValid): JsonResponse
+    protected function statusResponse(array $data, string $entityKey, bool $isActive): JsonResponse
     {
-        return $this->apiResponseUtils->statusChanged($data, $entityKey, $isValid);
+        return $this->apiResponseUtils->statusChanged($data, $entityKey, $isActive);
     }
 }

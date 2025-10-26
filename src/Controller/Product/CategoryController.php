@@ -301,7 +301,7 @@ class CategoryController extends AbstractApiController
         $data = $this->getJsonData($request);
         $active = $this->getBooleanValue($data, 'active', false);
 
-        $category = $this->categoryService->toogleStatus($id, $active);
+        $category = $this->categoryService->toggleStatus($id, $active);
 
         return $this->statusReponse(
             ['id' => $id, 'name' => $category->getName(), 'active' => $category->isActive()],

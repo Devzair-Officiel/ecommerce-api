@@ -24,6 +24,8 @@ class CategoryRepository extends AbstractRepository
     {
         $qb = $this->createBaseQueryBuilder();
 
+        $this->applyMultipleLikeFilters($qb, $filters, $this->searchableFields);
+
         $this->applyTextSearch($qb, $filters);
         $this->applySiteFilter($qb, $filters);
         $this->applyLocaleFilter($qb, $filters);

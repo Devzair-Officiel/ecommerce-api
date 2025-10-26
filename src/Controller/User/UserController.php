@@ -204,13 +204,13 @@ class UserController extends AbstractApiController
      */
     #[Route('/{id}/status', name: 'toggle_status', methods: ['PATCH'], requirements: ['id' => '\d+'])]
     #[IsGranted('ROLE_ADMIN')]
-    public function toogleStatus(int $id, Request $request): JsonResponse
+    public function toggleStatus(int $id, Request $request): JsonResponse
     {
         $data = $this->getJsonData($request);
 
         $active = $this->getBooleanValue($data, 'active', false);
 
-        $user = $this->userService->toogleStatus($id, $active);
+        $user = $this->userService->toggleStatus($id, $active);
 
         return $this->apiResponseUtils->statusChanged(
             data: ['id' => $id, 'email' => $user->getEmail(), 'active' => $user->isActive()],
