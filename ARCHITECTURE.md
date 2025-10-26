@@ -37,6 +37,51 @@ Chaque domaine est autonome et communique avec les autres via des relations clai
 
 ---
 
+┌─────────────────────────────────────────────────────────────────┐
+│                     FLUX DE PAIEMENT STRIPE                      │
+└─────────────────────────────────────────────────────────────────┘
+
+1️⃣ CRÉATION DE LA COMMANDE (Frontend Nuxt)
+   ┌──────────┐
+   │  Client  │─── POST /orders ──→ 📡 API Symfony
+   └──────────┘                         │
+                                        ├─ Créé Order (status: PENDING)
+                                        ├─ Créé Payment (status: PENDING)
+                                        ├─ Appelle Stripe API pour créer PaymentIntent
+                                        │
+   ┌──────────┐                         │
+   │  Client  │←── Retourne client_secret ─┘
+   └──────────┘
+        │
+        │ 2️⃣ PAIEMENT CÔTÉ CLIENT
+        │
+        └──→ Stripe.js (dans le navigateur)
+             │
+             └──→ Stripe traite le paiement (carte, 3DS, etc.)
+
+
+3️⃣ NOTIFICATION ASYNCHRONE (Webhooks Stripe)
+   
+   ┌──────────────┐
+   │ Stripe Server│──── POST /webhook/stripe ──→ 📡 API Symfony
+   └──────────────┘                                   │
+                                                      ├─ Vérifie signature Stripe
+                                                      ├─ Met à jour Payment (SUCCESS/FAILED)
+                                                      ├─ Met à jour Order (CONFIRMED/CANCELLED)
+                                                      └─ Envoie email de confirmation
+
+
+4️⃣ CONFIRMATION CÔTÉ CLIENT (Optionnel - améliore UX)
+
+   ┌──────────┐
+   │  Client  │──── Polling GET /orders/{id} ──→ 📡 API Symfony
+   └──────────┘     (toutes les 2 secondes pendant 30s)
+        │                                              │
+        │                                              └─ Retourne status actuel
+        │
+        ├─ Si status = CONFIRMED → Affiche "✅ Paiement réussi !"
+        └─ Si status = PENDING après 30s → Affiche "⏳ En attente, vous recevrez un email"
+
 ## 🏪 DOMAINE SITE (Multi-tenant)
 
 ### Entité : Site
