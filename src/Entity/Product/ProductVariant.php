@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace App\Entity\Product;
 
 use App\Traits\DateTrait;
-use App\Traits\ActiveStateTrait;
-use App\Traits\SoftDeletableTrait;
+use App\Entity\Cart\CartItem;
 use Doctrine\DBAL\Types\Types;
+use App\Traits\ActiveStateTrait;
 use Doctrine\ORM\Mapping as ORM;
-use App\Repository\Product\ProductVariantRepository;
+use App\Traits\SoftDeletableTrait;
 use Symfony\Component\Serializer\Annotation\Groups;
+use App\Repository\Product\ProductVariantRepository;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
+use Doctrine\Common\Collections\Collection;
+use Doctrine\Common\Collections\ArrayCollection;
 
 /**
  * Variante de produit (format/volume spécifique).
@@ -234,12 +237,11 @@ class ProductVariant
     #[Groups(['variant:read', 'variant:product'])]
     private ?Product $product = null;
 
-    // TODO: Décommenter après création de Cart/CartItem
-    // /**
-    //  * @var Collection<int, CartItem>
-    //  */
-    // #[ORM\OneToMany(targetEntity: CartItem::class, mappedBy: 'variant')]
-    // private Collection $cartItems;
+    /**
+     * @var Collection<int, CartItem>
+     */
+    #[ORM\OneToMany(targetEntity: CartItem::class, mappedBy: 'variant')]
+    private Collection $cartItems;
 
     // TODO: Décommenter après création de Order/OrderItem
     // /**

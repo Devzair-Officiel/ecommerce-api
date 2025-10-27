@@ -118,7 +118,9 @@ class ProductVariantFixtures extends Fixture implements DependentFixtureInterfac
         $variant->setEan($this->generateEAN());
 
         // État
-        $variant->isActive(); // ✅ Correction : isActive() était incorrect, c'est setActive()
+        // ✅ FIX : isActive() RETOURNE un boolean, ne DÉFINIT PAS l'état
+        // Pour activer : utiliser activate() (trait ActiveStateTrait)
+        $variant->activate(); // Équivalent à setClosedAt(null)
         $variant->setIsDefault($variantData['is_default'] ?? false);
 
         $manager->persist($variant);

@@ -6,14 +6,15 @@ namespace App\Entity\Product;
 
 use App\Entity\Site\Site;
 use App\Traits\DateTrait;
-use App\Traits\ActiveStateTrait;
-use App\Traits\SoftDeletableTrait;
+use App\Entity\Cart\Coupon;
 use Doctrine\DBAL\Types\Types;
+use App\Traits\ActiveStateTrait;
 use Doctrine\ORM\Mapping as ORM;
+use App\Traits\SoftDeletableTrait;
 use Gedmo\Mapping\Annotation as Gedmo;
 use Doctrine\Common\Collections\Collection;
-use Doctrine\Common\Collections\ArrayCollection;
 use App\Repository\Product\ProductRepository;
+use Doctrine\Common\Collections\ArrayCollection;
 use Symfony\Component\Serializer\Annotation\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
@@ -228,18 +229,18 @@ class Product
     // #[ORM\OneToMany(targetEntity: Review::class, mappedBy: 'product')]
     // private Collection $reviews;
 
-    // /**
-    //  * @var Collection<int, Coupon>
-    //  */
-    // #[ORM\ManyToMany(targetEntity: Coupon::class, mappedBy: 'products')]
-    // private Collection $coupons;
+    /**
+     * @var Collection<int, Coupon>
+     */
+    #[ORM\ManyToMany(targetEntity: Coupon::class, mappedBy: 'products')]
+    private Collection $coupons;
 
     public function __construct()
     {
         $this->variants = new ArrayCollection();
         $this->categories = new ArrayCollection();
         // $this->reviews = new ArrayCollection();
-        // $this->coupons = new ArrayCollection();
+        $this->coupons = new ArrayCollection();
     }
 
     // ===============================================

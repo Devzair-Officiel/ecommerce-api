@@ -105,7 +105,9 @@ class ProductFixtures extends Fixture implements DependentFixtureInterface
         $product->setStructuredData($this->generateStructuredData($product, $locale));
 
         // État et visibilité
-        $product->isActive();
+        // ✅ FIX : isActive() RETOURNE un boolean, ne DÉFINIT PAS l'état
+        // Pour activer : utiliser activate() (trait ActiveStateTrait)
+        $product->activate(); // Équivalent à setClosedAt(null)
         $product->setIsFeatured($productData['is_featured'] ?? false);
 
         // Association avec les catégories
