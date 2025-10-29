@@ -13,6 +13,7 @@ use Doctrine\ORM\Mapping as ORM;
 use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 use Symfony\Component\Serializer\Annotation\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
+use Symfony\Component\Serializer\Annotation\Ignore;
 
 /**
  * Site : Gère le multi-tenant (plusieurs boutiques sur une infrastructure).
@@ -231,7 +232,7 @@ class Site
     /**
      * Récupère une valeur de configuration.
      */
-    public function getSetting(string $key, mixed $default = null): mixed
+    public function getSettingValue(string $key, mixed $default = null): mixed
     {
         return $this->settings[$key] ?? $default;
     }
@@ -239,7 +240,8 @@ class Site
     /**
      * Définit une valeur de configuration.
      */
-    public function setSetting(string $key, mixed $value): static
+    #[Ignore]
+    public function setSettingValue(string $key, mixed $value): static
     {
         $settings = $this->settings ?? [];
         $settings[$key] = $value;

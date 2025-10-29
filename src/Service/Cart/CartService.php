@@ -560,13 +560,16 @@ class CartService extends AbstractService
         $guestCart = $this->cartRepository->findBySessionToken($sessionToken, $site);
 
         if (!$guestCart) {
+            error_log('EXCEPTION: Panier invité introuvable');
             throw new BusinessRuleException(
                 'guest_cart_not_found',
                 'Panier invité introuvable ou expiré.'
             );
         }
 
-        return $this->cartRepository->mergeGuestCartIntoUser($guestCart, $user);
+        $result = $this->cartRepository->mergeGuestCartIntoUser($guestCart, $user);
+
+        return $result;
     }
 
     // ===============================================

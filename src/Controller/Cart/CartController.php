@@ -18,13 +18,13 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * Contrôleur REST pour la gestion des paniers.
  * 
  * Endpoints :
- * - GET    /cart             : Récupérer panier actuel
- * - POST   /cart/items       : Ajouter un produit
- * - PATCH  /cart/items/{id}  : Modifier quantité
- * - DELETE /cart/items/{id}  : Supprimer un produit
- * - DELETE /cart             : Vider le panier
- * - GET    /cart/validate    : Valider avant checkout
- * - POST   /cart/merge       : Fusionner panier invité (connexion)
+ * - GET    /carts             : Récupérer panier actuel
+ * - POST   /carts/items       : Ajouter un produit
+ * - PATCH  /carts/items/{id}  : Modifier quantité
+ * - DELETE /carts/items/{id}  : Supprimer un produit
+ * - DELETE /carts             : Vider le panier
+ * - GET    /carts/validate    : Valider avant checkout
+ * - POST   /carts/merge       : Fusionner panier invité (connexion)
  * 
  * Authentification :
  * - Invités : JWT avec cart_token
@@ -36,7 +36,7 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * - X-Locale : Langue (fr, en, es)
  * - Authorization : Bearer {JWT}
  */
-#[Route('/api/cart', name: 'api_cart_')]
+#[Route('/carts', name: 'api_cart_')]
 class CartController extends AbstractApiController
 {
     public function __construct(
@@ -50,8 +50,6 @@ class CartController extends AbstractApiController
 
     /**
      * Récupère le panier actuel de l'utilisateur ou invité.
-     * 
-     * GET /api/cart
      * 
      * Headers :
      * - X-Site-Id: 1
@@ -122,7 +120,7 @@ class CartController extends AbstractApiController
     /**
      * Ajoute un produit au panier.
      * 
-     * POST /api/cart/items
+     * POST /cart/items
      * 
      * Body :
      * {
@@ -168,6 +166,9 @@ class CartController extends AbstractApiController
             );
 
             $cart = $result['cart'];
+            $token = $result['token'];  // ← Important !
+        } else {
+            $token = $cart->getSessionToken();  // ← Récupérer le token existant
         }
 
         // Récupérer données
@@ -195,14 +196,21 @@ class CartController extends AbstractApiController
         try {
             $item = $this->cartService->addItem($cart, $variantId, $quantity, $customMessage);
 
-            return $this->json([
+            $response = [
                 'item' => $item->toArray(),
                 'cart' => [
                     'id' => $cart->getId(),
                     'summary' => $cart->getSummary(),
                 ],
                 'message' => 'Produit ajouté au panier.'
-            ], Response::HTTP_CREATED, [], ['groups' => ['cart:read', 'cart:items']]);
+            ];
+
+            // 🔥 IMPORTANT : Retourner le token pour les invités
+            if ($token) {
+                $response['token'] = $token;
+            }
+
+            return $this->json($response, Response::HTTP_CREATED, [], ['groups' => ['cart:read', 'cart:items']]);
         } catch (\Exception $e) {
             return $this->handleBusinessException($e);
         }
@@ -215,7 +223,7 @@ class CartController extends AbstractApiController
     /**
      * Modifie la quantité d'un item.
      * 
-     * PATCH /api/cart/items/{id}
+     * PATCH /cart/items/{id}
      * 
      * Body :
      * {
@@ -265,7 +273,7 @@ class CartController extends AbstractApiController
     /**
      * Supprime un produit du panier.
      * 
-     * DELETE /api/cart/items/{id}
+     * DELETE /cart/items/{id}
      * 
      * Réponse 200 :
      * {
@@ -305,7 +313,7 @@ class CartController extends AbstractApiController
     /**
      * Vide complètement le panier.
      * 
-     * DELETE /api/cart
+     * DELETE /cart
      * 
      * Réponse 200 :
      * {
@@ -346,7 +354,7 @@ class CartController extends AbstractApiController
     /**
      * Valide le panier avant de passer commande.
      * 
-     * GET /api/cart/validate
+     * GET /cart/validate
      * 
      * Vérifications :
      * - Variantes toujours disponibles
@@ -392,7 +400,9 @@ class CartController extends AbstractApiController
             ? Response::HTTP_OK
             : Response::HTTP_BAD_REQUEST;
 
-        return $this->json($statistics, $statusCode);
+        return $this->json($statistics, $statusCode, [], [
+            'groups' => ['cart:read']
+        ]);
     }
 
     // ===============================================
@@ -461,17 +471,34 @@ class CartController extends AbstractApiController
      */
     private function getSiteFromHeaders(Request $request): Site
     {
-        $siteId = $request->headers->get('X-Site-Id');
+        // Option 1 : Depuis le domaine (recommandé en production)
+        // $domain = $request->getHost();
+        // return $this->siteRepository->findByDomain($domain);
 
-        if (!$siteId) {
-            throw new \Exception('Header X-Site-Id requis.', 400);
-        }
+        // Option 2 : Depuis un header custom
+        // $siteId = $request->headers->get('X-Site-Id');
 
-        // Injecter SiteRepository
-        $site = $this->siteRepository->find($siteId);
+        // if (!$siteId) {
+        //     throw new \Exception('Header X-Site-Id requis.', 400);
+        // }
+
+        // // Injecter SiteRepository
+        // $site = $this->siteRepository->find($siteId);
+
+        // if (!$site) {
+        //     throw new \Exception('Site non trouvé.', 404);
+        // }
+
+        // return $site;
+
+        // Option 3 : Depuis query param (temporaire développement)
+        $siteCode = $request->query->get('site', 'FR');
+        $site = $this->siteRepository->findByCode($siteCode);
 
         if (!$site) {
-            throw new \Exception('Site non trouvé.', 404);
+            // Fallback : premier site actif
+            $sites = $this->siteRepository->findAccessibleSites();
+            $site = $sites[0] ?? throw new \RuntimeException('Aucun site disponible.');
         }
 
         return $site;

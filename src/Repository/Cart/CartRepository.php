@@ -60,6 +60,14 @@ class CartRepository extends AbstractRepository
     public function findByUser(User $user, Site $site): ?Cart
     {
         return $this->createQueryBuilder('c')
+            ->addSelect('site')
+            ->leftJoin('c.site', 'site')
+            ->addSelect('user')
+            ->leftJoin('c.user', 'user')
+            ->addSelect('items', 'variant', 'product')
+            ->leftJoin('c.items', 'items')
+            ->leftJoin('items.variant', 'variant')
+            ->leftJoin('variant.product', 'product')
             ->where('c.user = :user')
             ->andWhere('c.site = :site')
             ->setParameter('user', $user)
@@ -78,6 +86,12 @@ class CartRepository extends AbstractRepository
     public function findBySessionToken(string $sessionToken, Site $site): ?Cart
     {
         return $this->createQueryBuilder('c')
+            ->addSelect('site')
+            ->leftJoin('c.site', 'site')
+            ->addSelect('items', 'variant', 'product')
+            ->leftJoin('c.items', 'items')
+            ->leftJoin('items.variant', 'variant')
+            ->leftJoin('variant.product', 'product')
             ->where('c.sessionToken = :token')
             ->andWhere('c.site = :site')
             ->andWhere('c.expiresAt > :now')
@@ -199,36 +213,54 @@ class CartRepository extends AbstractRepository
      */
     public function mergeGuestCartIntoUser(Cart $guestCart, User $user): Cart
     {
+        $em = $this->getEntityManager();
         $userCart = $this->findByUser($user, $guestCart->getSite());
 
         if (!$userCart) {
             // Pas de panier existant → attacher le panier invité
             $guestCart->attachToUser($user);
-            $this->getEntityManager()->flush();
+            $em->flush();
             return $guestCart;
         }
 
-        // Panier existant → fusionner les items
-        foreach ($guestCart->getItems() as $guestItem) {
-            $existingItem = $userCart->findItemByVariant($guestItem->getVariant()?->getId());
+        // IMPORTANT : itérer sur une copie pour pouvoir modifier la collection
+        foreach (iterator_to_array($guestCart->getItems()) as $guestItem) {
+            $variant = $guestItem->getVariant();
+            if (!$variant) {
+                // Variante supprimée → sortir proprement de la collection puis supprimer l’item
+                $guestCart->removeItem($guestItem);   // doit mettre cart=null côté owning OU retirer l'item du ManyToOne
+                $em->remove($guestItem);
+                continue;
+            }
+
+            $existingItem = $userCart->findItemByVariant($variant->getId());
 
             if ($existingItem) {
-                // Item déjà présent → additionner quantités
-                $newQty = $existingItem->getQuantity() + $guestItem->getQuantity();
-                $existingItem->setQuantity($newQty);
+                // Addition de quantité sur la ligne existante
+                $existingItem->setQuantity($existingItem->getQuantity() + $guestItem->getQuantity());
+
+                // DÉTACHER l’item du guest cart AVANT toute suppression du guest cart
+                $guestCart->removeItem($guestItem);
+                // On supprime l’ancienne ligne (plus simple/robuste que la réassignation si ManyToOne non-nullable)
+                $em->remove($guestItem);
             } else {
-                // Nouvel item → transférer
-                $guestItem->setCart($userCart);
-                $userCart->addItem($guestItem);
+                // TRANSFERT : retirer puis réassigner au user cart
+                $guestCart->removeItem($guestItem);   // met à jour l'inverse
+                $guestItem->setCart($userCart);       // owning side
+                $userCart->addItem($guestItem);       // inverse side
+                // (pas de flush ici)
             }
         }
 
-        // Supprimer le panier invité (items transférés)
-        $this->getEntityManager()->remove($guestCart);
-        $this->getEntityManager()->flush();
+        // Le panier invité n’a plus d’items → on peut le supprimer sans risque d’orphanRemoval incorrect
+        $em->remove($guestCart);
+
+        // Un seul flush à la fin : pas de timing foireux
+        $em->flush();
 
         return $userCart;
     }
+
 
     // ===============================================
     // STATISTIQUES & ANALYTICS

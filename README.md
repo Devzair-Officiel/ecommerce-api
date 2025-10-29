@@ -37,3 +37,13 @@ Configuration pour permettre au frontend de consommer l'API:
     ###> nelmio/cors-bundle ###
     CORS_ALLOW_ORIGIN='^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$'
     ###< nelmio/cors-bundle ###
+
+🎯 Résolution Erreur intl
+    1. 🔧 Scripts d'installation
+
+install_intl.sh : Script automatique d'installation de l'extension intl
+    # 1. Rendre le script exécutable
+    chmod +x install_intl.sh
+
+    # 2. Exécuter l'installation
+    sudo ./install_intl.sh

@@ -42,6 +42,8 @@ security:
         - { path: ^/api/v1/auth/forgot-password, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/reset-password, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/verify-email, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/carts/items$, methods: [POST], roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/carts$, methods: [GET], roles: PUBLIC_ACCESS }
         
         # Routes publiques catalogue (lecture seule)
         - { path: ^/api/products, roles: PUBLIC_ACCESS, methods: [GET] }
@@ -49,14 +51,14 @@ security:
         - { path: ^/api/sites, roles: PUBLIC_ACCESS, methods: [GET] }
         
         # Routes nécessitant authentification
-        - { path: ^/api/cart, roles: ROLE_USER }
-        - { path: ^/api/orders, roles: ROLE_USER }
-        - { path: ^/api/profile, roles: ROLE_USER }
-        - { path: ^/api/addresses, roles: ROLE_USER }
-        - { path: ^/api/reviews, roles: ROLE_USER }
+        - { path: ^/api/v1/cart, roles: ROLE_USER }
+        - { path: ^/api/v1/orders, roles: ROLE_USER }
+        - { path: ^/api/v1/profile, roles: ROLE_USER }
+        - { path: ^/api/v1/addresses, roles: ROLE_USER }
+        - { path: ^/api/v1/reviews, roles: ROLE_USER }
         
         # Routes admin
-        - { path: ^/api/admin, roles: ROLE_ADMIN }
+        - { path: ^/api/v1/admin, roles: ROLE_ADMIN }
         
         # Tout le reste nécessite authentification par défaut
         - { path: ^/api, roles: ROLE_USER }

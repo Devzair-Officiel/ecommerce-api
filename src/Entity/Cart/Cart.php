@@ -15,6 +15,7 @@ use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Annotation\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
+use Symfony\Component\Uid\Uuid;
 
 /**
  * Panier utilisateur persistant (multi-device).
@@ -580,6 +581,20 @@ class Cart
         $this->sessionToken = null; // Plus besoin du token
         $this->recalculateExpiration(); // Prolonge à 30 jours
         return $this;
+    }
+
+    /**
+     * Génère et définit un token de session unique pour panier invité.
+     * 
+     * Appelé lors de la création d'un panier invité.
+     * Génère un UUID v4 au format RFC 4122 (36 caractères).
+     * 
+     * @return string Le token généré
+     */
+    public function generateSessionToken(): string
+    {
+        $this->sessionToken = Uuid::v4()->toRfc4122();
+        return $this->sessionToken;
     }
 
     // ===============================================
