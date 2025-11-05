@@ -1,6 +1,7 @@
 entity_name:
   user: "User"
   category: "category"
+  wishlist: "wishlist"
 
 # Messages Générique
 entity:

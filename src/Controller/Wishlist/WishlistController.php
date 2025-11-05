@@ -4,30 +4,34 @@ declare(strict_types=1);
 
 namespace App\Controller\Wishlist;
 
-use App\Controller\Core\AbstractApiController;
+use App\Entity\Site\Site;
+use App\Utils\ApiResponseUtils;
+use App\Exception\ValidationException;
 use App\Repository\Site\SiteRepository;
 use App\Service\Wishlist\WishlistService;
-use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use App\Controller\Core\AbstractApiController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * Contrôleur REST pour la gestion des wishlists.
  * 
  * Endpoints :
- * - GET    /wishlists              : Liste mes wishlists
- * - GET    /wishlists/{id}         : Détails wishlist
- * - POST   /wishlists              : Créer wishlist
- * - DELETE /wishlists/{id}         : Supprimer wishlist
- * - POST   /wishlists/{id}/items   : Ajouter produit
- * - DELETE /wishlists/{id}/items/{itemId} : Supprimer produit
- * - PATCH  /wishlists/{id}/items/{itemId} : Modifier item
- * - POST   /wishlists/{id}/convert : Convertir en panier
- * - POST   /wishlists/{id}/share   : Activer partage
- * - DELETE /wishlists/{id}/share   : Désactiver partage
- * - GET    /wishlists/shared/{token} : Voir wishlist partagée (public)
+ * - GET    /wishlists                      : Liste mes wishlists
+ * - GET    /wishlists/{id}                 : Détails wishlist
+ * - POST   /wishlists                      : Créer wishlist
+ * - DELETE /wishlists/{id}                 : Supprimer wishlist
+ * - POST   /wishlists/{id}/items           : Ajouter produit
+ * - DELETE /wishlists/{id}/items/{itemId}  : Supprimer produit
+ * - PATCH  /wishlists/{id}/items/{itemId}  : Modifier item
+ * - POST   /wishlists/{id}/convert         : Convertir en panier
+ * - POST   /wishlists/{id}/share           : Activer partage
+ * - DELETE /wishlists/{id}/share           : Désactiver partage
+ * - GET    /wishlists/shared/{token}       : Voir wishlist partagée (public)
  */
 #[Route('/wishlists', name: 'api_wishlist_')]
 #[IsGranted('ROLE_USER')]
@@ -35,8 +39,13 @@ class WishlistController extends AbstractApiController
 {
     public function __construct(
         private readonly WishlistService $wishlistService,
-        private readonly SiteRepository $siteRepository
-    ) {}
+        private readonly SiteRepository $siteRepository,
+        ApiResponseUtils $apiResponseUtils,
+        SerializerInterface $serializer,
+    )
+    {
+        parent::__construct($apiResponseUtils, $serializer);
+    }
 
     // ===============================================
     // LISTE WISHLISTS
@@ -61,11 +70,18 @@ class WishlistController extends AbstractApiController
         $site = $this->getSiteFromHeaders($request);
         $user = $this->getUser();
 
+        // ✅ Pas de try/catch : le service lance des exceptions typées
+        // qui sont automatiquement gérées par ApiExceptionSubscriber
         $wishlists = $this->wishlistService->getUserWishlists($user, $site);
 
-        return $this->json([
-            'wishlists' => array_map(fn($w) => $w->getSummary(), $wishlists)
-        ], Response::HTTP_OK);
+        // ✅ Format standardisé via ApiResponseUtils
+        return $this->apiResponseUtils->success(
+            data: [
+                'wishlists' => array_map(fn($w) => $w->getSummary(), $wishlists)
+            ],
+            entityKey: 'wishlist',
+            status: Response::HTTP_OK
+        );
     }
 
     // ===============================================
@@ -91,10 +107,12 @@ class WishlistController extends AbstractApiController
     {
         $user = $this->getUser();
 
-        try {
-            $wishlist = $this->wishlistService->getWishlist($id, $user);
+        // ✅ Les exceptions (EntityNotFoundException, BusinessRuleException)
+        // sont gérées automatiquement
+        $wishlist = $this->wishlistService->getWishlist($id, $user);
 
-            return $this->json([
+        return $this->apiResponseUtils->success(
+            data: [
                 'wishlist' => [
                     'id' => $wishlist->getId(),
                     'name' => $wishlist->getName(),
@@ -106,10 +124,10 @@ class WishlistController extends AbstractApiController
                     'total_value' => $wishlist->getTotalValue(),
                     'items' => array_map(fn($item) => $item->toArray(), $wishlist->getItems()->toArray())
                 ]
-            ], Response::HTTP_OK);
-        } catch (\Exception $e) {
-            return $this->handleBusinessException($e);
-        }
+            ],
+            messageKey: 'wishlist',
+            entityKey: 'wishlist'
+        );
     }
 
     // ===============================================
@@ -119,7 +137,7 @@ class WishlistController extends AbstractApiController
     /**
      * Crée une nouvelle wishlist.
      * 
-     * POST /api/wishlist
+     * POST /wishlists
      * 
      * Body :
      * {
@@ -133,31 +151,33 @@ class WishlistController extends AbstractApiController
      * }
      */
     #[Route('', name: 'create', methods: ['POST'])]
-    public function createWishlist(Request $request): JsonResponse
+    public function create(Request $request): JsonResponse
     {
         $site = $this->getSiteFromHeaders($request);
         $user = $this->getUser();
-
-        $data = json_decode($request->getContent(), true);
-        $name = trim($data['name'] ?? '');
-        $description = trim($data['description'] ?? '') ?: null;
-
-        if (empty($name)) {
-            return $this->json([
-                'error' => 'name_required',
-                'message' => 'Le nom de la wishlist est requis.'
-            ], Response::HTTP_BAD_REQUEST);
-        }
+        $data = $this->getJsonData($request);
 
         try {
+            // ✅ Utilise requireField au lieu de validation manuelle
+            $this->requireField($data, 'name', 'Le nom de la wishlist est requis');
+
+            $name = trim($data['name']);
+            $description = isset($data['description']) && trim($data['description']) !== ''
+                ? trim($data['description'])
+                : null;
+
             $wishlist = $this->wishlistService->createWishlist($user, $site, $name, $description);
 
-            return $this->json([
-                'wishlist' => $wishlist->getSummary(),
-                'message' => 'Wishlist créée avec succès.'
-            ], Response::HTTP_CREATED);
-        } catch (\Exception $e) {
-            return $this->handleBusinessException($e);
+            // ✅ Utilise createResponse au lieu de success()
+            return $this->createResponse(
+                $wishlist,
+                ['wishlist:read', 'date'],
+                'wishlist'
+            );
+        } catch (\InvalidArgumentException $e) {
+            return $this->missingFieldError('name');
+        } catch (ValidationException $e) {
+            return $this->validationError($e->getFormattedErrors());
         }
     }
 
@@ -168,28 +188,25 @@ class WishlistController extends AbstractApiController
     /**
      * Supprime une wishlist.
      * 
-     * DELETE /api/wishlist/{id}
+     * DELETE /wishlist/{id}
      * 
      * Réponse 200 :
      * {
      *   "message": "Wishlist supprimée."
      * }
      */
-    #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
-    public function deleteWishlist(int $id): JsonResponse
+    #[Route('/{id}', name: 'delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
+    public function delete(int $id): JsonResponse
     {
         $user = $this->getUser();
+        $wishlist = $this->wishlistService->getWishlist($id, $user);
 
-        try {
-            $wishlist = $this->wishlistService->getWishlist($id, $user);
-            $this->wishlistService->deleteWishlist($wishlist, $user);
+        $this->wishlistService->deleteWishlist($wishlist, $user);
 
-            return $this->json([
-                'message' => 'Wishlist supprimée avec succès.'
-            ], Response::HTTP_OK);
-        } catch (\Exception $e) {
-            return $this->handleBusinessException($e);
-        }
+        return $this->deleteResponse(
+            ['id' => $id, 'name' => $wishlist->getName()],
+            'wishlist'
+        );
     }
 
     // ===============================================
@@ -199,7 +216,7 @@ class WishlistController extends AbstractApiController
     /**
      * Ajoute un produit à une wishlist.
      * 
-     * POST /api/wishlist/{id}/items
+     * POST /wishlists/{id}/items
      * 
      * Body :
      * {
@@ -215,36 +232,41 @@ class WishlistController extends AbstractApiController
      *   "message": "Produit ajouté à la wishlist."
      * }
      */
-    #[Route('/{id}/items', name: 'add_item', methods: ['POST'])]
+    #[Route('/{id}/items', name: 'add_item', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function addItem(int $id, Request $request): JsonResponse
     {
         $user = $this->getUser();
+        $wishlist = $this->wishlistService->getWishlist($id, $user);
+        $data = $this->getJsonData($request);
 
         try {
-            $wishlist = $this->wishlistService->getWishlist($id, $user);
+            $variantId = $this->getIntValue($data, 'variant_id');
 
-            $data = json_decode($request->getContent(), true);
-            $variantId = (int) ($data['variant_id'] ?? 0);
-            $priority = (int) ($data['priority'] ?? 2);
-            $note = $data['note'] ?? null;
-            $quantity = (int) ($data['quantity'] ?? 1);
-
-            if ($variantId <= 0) {
-                return $this->json([
-                    'error' => 'variant_id_required',
-                    'message' => 'L\'ID du produit est requis.'
-                ], Response::HTTP_BAD_REQUEST);
+            if (!$variantId || $variantId <= 0) {
+                return $this->apiResponseUtils->error(
+                    errors: [['field' => 'variant_id', 'message' => 'Valid variant_id is required']],
+                    messageKey: 'validation.required_field',
+                    status: Response::HTTP_BAD_REQUEST
+                );
             }
+
+            $priority = $this->getIntValue($data, 'priority', 2);
+            $quantity = $this->getIntValue($data, 'quantity', 1);
+            $note = isset($data['note']) ? trim($data['note']) : null;
 
             $item = $this->wishlistService->addItem($wishlist, $variantId, $priority, $note, $quantity);
 
-            return $this->json([
-                'item' => $item->toArray(),
-                'wishlist' => $wishlist->getSummary(),
-                'message' => 'Produit ajouté à la wishlist.'
-            ], Response::HTTP_CREATED);
-        } catch (\Exception $e) {
-            return $this->handleBusinessException($e);
+            return $this->apiResponseUtils->success(
+                data: [
+                    'item' => $item->toArray(),
+                    'wishlist' => $wishlist->getSummary()
+                ],
+                messageKey: 'entity.created',
+                entityKey: 'wishlist_item',
+                status: Response::HTTP_CREATED
+            );
+        } catch (ValidationException $e) {
+            return $this->validationError($e->getFormattedErrors());
         }
     }
 
@@ -255,27 +277,24 @@ class WishlistController extends AbstractApiController
     /**
      * Supprime un produit de la wishlist.
      * 
-     * DELETE /api/wishlist/{id}/items/{itemId}
+     * DELETE /wishlists/{id}/items/{itemId}
      * 
      * Réponse 200 :
      * {
      *   "message": "Produit supprimé de la wishlist."
      * }
      */
-    #[Route('/{id}/items/{itemId}', name: 'remove_item', methods: ['DELETE'])]
+    #[Route('/{id}/items/{itemId}', name: 'remove_item', methods: ['DELETE'], requirements: ['id' => '\d+', 'itemId' => '\d+'])]
     public function removeItem(int $id, int $itemId): JsonResponse
     {
         $user = $this->getUser();
+        $this->wishlistService->removeItem($itemId, $user);
 
-        try {
-            $this->wishlistService->removeItem($itemId, $user);
-
-            return $this->json([
-                'message' => 'Produit supprimé de la wishlist.'
-            ], Response::HTTP_OK);
-        } catch (\Exception $e) {
-            return $this->handleBusinessException($e);
-        }
+        return $this->apiResponseUtils->success(
+            data: ['item_id' => $itemId],
+            messageKey: 'entity.deleted',
+            entityKey: 'wishlist_item'
+        );
     }
 
     // ===============================================
@@ -285,7 +304,7 @@ class WishlistController extends AbstractApiController
     /**
      * Modifie un item (priorité, note, quantité).
      * 
-     * PATCH /api/wishlist/{id}/items/{itemId}
+     * PATCH /wishlists/{id}/items/{itemId}
      * 
      * Body :
      * {
@@ -299,21 +318,24 @@ class WishlistController extends AbstractApiController
      *   "item": {...}
      * }
      */
-    #[Route('/{id}/items/{itemId}', name: 'update_item', methods: ['PATCH'])]
+    #[Route('/{id}/items/{itemId}', name: 'update_item', methods: ['PATCH'], requirements: ['id' => '\d+', 'itemId' => '\d+'])]
     public function updateItem(int $id, int $itemId, Request $request): JsonResponse
     {
         $user = $this->getUser();
-        $data = json_decode($request->getContent(), true);
+        $data = $this->getJsonData($request);
 
         try {
             $item = $this->wishlistService->updateItem($itemId, $user, $data);
 
-            return $this->json([
-                'item' => $item->toArray(),
-                'message' => 'Produit mis à jour.'
-            ], Response::HTTP_OK);
-        } catch (\Exception $e) {
-            return $this->handleBusinessException($e);
+            return $this->apiResponseUtils->success(
+                data: [
+                    'item' => $item->toArray(),
+                ],
+                entityKey: 'wishlist',
+                status: Response::HTTP_OK
+            );
+        } catch (ValidationException $e) {
+            return $this->validationError($e->getFormattedErrors());
         }
     }
 
@@ -324,7 +346,7 @@ class WishlistController extends AbstractApiController
     /**
      * Convertit la wishlist en panier.
      * 
-     * POST /api/wishlist/{id}/convert
+     * POST /wishlist/{id}/convert
      * 
      * Ajoute tous les produits disponibles au panier.
      * 
@@ -339,30 +361,27 @@ class WishlistController extends AbstractApiController
      *   }
      * }
      */
-    #[Route('/{id}/convert', name: 'convert_to_cart', methods: ['POST'])]
+    #[Route('/{id}/convert', name: 'convert_to_cart', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function convertToCart(int $id): JsonResponse
     {
         $user = $this->getUser();
+        $wishlist = $this->wishlistService->getWishlist($id, $user);
+        $result = $this->wishlistService->convertToCart($wishlist);
 
-        try {
-            $wishlist = $this->wishlistService->getWishlist($id, $user);
-            $result = $this->wishlistService->convertToCart($wishlist);
-
-            return $this->json([
+        return $this->apiResponseUtils->success(
+            data: [
                 'cart' => [
                     'id' => $result['cart']->getId(),
                     'summary' => $result['cart']->getSummary()
                 ],
-                'report' => $result['report'],
-                'message' => sprintf(
-                    '%d produit(s) ajouté(s) au panier, %d ignoré(s).',
-                    $result['report']['added'],
-                    $result['report']['skipped']
-                )
-            ], Response::HTTP_OK);
-        } catch (\Exception $e) {
-            return $this->handleBusinessException($e);
-        }
+                'report' => $result['report']
+            ],
+            messageKey: 'wishlist.converted_to_cart',
+            messageParams: [
+                '%added%' => $result['report']['added'],
+                '%skipped%' => $result['report']['skipped']
+            ]
+        );
     }
 
     // ===============================================
@@ -463,18 +482,36 @@ class WishlistController extends AbstractApiController
     /**
      * Récupère le Site depuis le header X-Site-Id.
      */
-    private function getSiteFromHeaders(Request $request)
+    private function getSiteFromHeaders(Request $request): Site
     {
-        $siteId = $request->headers->get('X-Site-Id');
+        // Option 1 : Depuis le domaine (recommandé en production)
+        // $domain = $request->getHost();
+        // return $this->siteRepository->findByDomain($domain);
 
-        if (!$siteId) {
-            throw new \Exception('Header X-Site-Id requis.', Response::HTTP_BAD_REQUEST);
-        }
+        // Option 2 : Depuis un header custom
+        // $siteId = $request->headers->get('X-Site-Id');
 
-        $site = $this->siteRepository->find((int) $siteId);
+        // if (!$siteId) {
+        //     throw new \Exception('Header X-Site-Id requis.', 400);
+        // }
+
+        // // Injecter SiteRepository
+        // $site = $this->siteRepository->find($siteId);
+
+        // if (!$site) {
+        //     throw new \Exception('Site non trouvé.', 404);
+        // }
+
+        // return $site;
+
+        // Option 3 : Depuis query param (temporaire développement)
+        $siteCode = $request->query->get('site', 'FR');
+        $site = $this->siteRepository->findByCode($siteCode);
 
         if (!$site) {
-            throw new \Exception('Site non trouvé.', Response::HTTP_NOT_FOUND);
+            // Fallback : premier site actif
+            $sites = $this->siteRepository->findAccessibleSites();
+            $site = $sites[0] ?? throw new \RuntimeException('Aucun site disponible.');
         }
 
         return $site;

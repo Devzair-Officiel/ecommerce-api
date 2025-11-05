@@ -96,7 +96,7 @@ class CouponController extends AbstractApiController
         $cart = $this->getCartFromRequest($request);
 
         if (!$cart) {
-            return $this->resourceNotFoundError('cart', 'cart.not_found');
+            return $this->notFoundError('cart', ['site_id' => $site->getId()]);
         }
 
         // ✅ Extraction et validation des données JSON avec helper

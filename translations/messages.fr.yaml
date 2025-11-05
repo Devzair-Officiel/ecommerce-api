@@ -3,6 +3,8 @@ entity_name:
   user: utilisateur
   address: adresse
   category: "catégorie"
+  wishlist: "Liste de souhait"
+  wishlist_item: "Produit"
 
 # User messages
 user:
