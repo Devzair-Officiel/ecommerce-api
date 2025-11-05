@@ -250,7 +250,8 @@ class CouponService extends AbstractService
             return $report;
         }
 
-        $report['coupon'] = $coupon;
+        $report['coupon'] = $coupon->getSummary();
+        $report['site'] = $coupon->getSite();
         $report['checks']['exists'] = true;
 
         // 2. Vérifier validité

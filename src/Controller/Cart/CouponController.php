@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Controller\Cart;
 
+use App\Entity\Site\Site;
+use App\Utils\ApiResponseUtils;
 use App\Service\Cart\CartService;
 use App\Service\Cart\CouponService;
 use App\Repository\Site\SiteRepository;
@@ -12,27 +14,53 @@ use App\Controller\Core\AbstractApiController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\Serializer\SerializerInterface;
 
 /**
  * Contrôleur REST pour la gestion des coupons de réduction.
  * 
  * Endpoints :
- * - POST   /cart/coupon/apply    : Appliquer un coupon
- * - DELETE /cart/coupon          : Supprimer le coupon
- * - POST   /cart/coupon/validate : Valider un coupon (sans l'appliquer)
+ * - POST   /carts/coupon/apply    : Appliquer un coupon
+ * - DELETE /carts/coupon          : Supprimer le coupon
+ * - POST   /carts/coupon/validate : Valider un coupon (sans l'appliquer)
  * 
  * Headers requis :
  * - X-Site-Id : ID du site
  * - X-Cart-Token : Token panier invité OU Authorization : Bearer {JWT}
  */
-#[Route('/api/cart/coupon', name: 'api_coupon_')]
+#[Route('/carts/coupons', name: 'api_coupon_')]
 class CouponController extends AbstractApiController
 {
     public function __construct(
         private readonly CouponService $couponService,
         private readonly CartService $cartService,
-        private readonly SiteRepository $siteRepository
-    ) {}
+        private readonly SiteRepository $siteRepository,
+        SerializerInterface $serializer,
+        ApiResponseUtils $apiResponseUtils,
+    )
+    {
+        parent::__construct($apiResponseUtils, $serializer);
+    }
+
+    #[Route('', name: 'list', methods: ['GET'])]
+    public function list(Request $request): JsonResponse
+    {
+        $pagination = $this->getPaginationParams($request);
+        $filters = $this->extractFilters($request);
+
+        $result = $this->couponService->search(
+            $pagination['page'],
+            $pagination['limit'],
+            $filters
+        );
+
+        return $this->listResponse(
+            $result,
+            ['coupon:read', 'date'],
+            'coupon',
+            'api_coupon_list'
+        );
+    }
 
     // ===============================================
     // APPLIQUER COUPON
@@ -41,7 +69,7 @@ class CouponController extends AbstractApiController
     /**
      * Applique un code promo au panier.
      * 
-     * POST /api/cart/coupon/apply
+     * POST /carts/coupon/apply
      * 
      * Body :
      * {
@@ -62,47 +90,36 @@ class CouponController extends AbstractApiController
     #[Route('/apply', name: 'apply', methods: ['POST'])]
     public function applyCoupon(Request $request): JsonResponse
     {
-        // Récupérer contexte
+        // ✅ Récupération automatique avec validation
         $site = $this->getSiteFromHeaders($request);
         $user = $this->getUser();
-
-        // Récupérer panier
         $cart = $this->getCartFromRequest($request);
 
         if (!$cart) {
-            return $this->json([
-                'error' => 'cart_not_found',
-                'message' => 'Aucun panier trouvé.'
-            ], Response::HTTP_NOT_FOUND);
+            return $this->resourceNotFoundError('cart', 'cart.not_found');
         }
 
-        // Récupérer code promo
-        $data = json_decode($request->getContent(), true);
-        $code = trim($data['code'] ?? '');
+        // ✅ Extraction et validation des données JSON avec helper
+        $data = $this->getJsonData($request);
+        $code = $this->requireJsonField($data, 'code');
 
-        if (empty($code)) {
-            return $this->json([
-                'error' => 'code_required',
-                'message' => 'Le code promo est requis.'
-            ], Response::HTTP_BAD_REQUEST);
-        }
+        // ✅ Appel service sans try/catch
+        // Les BusinessRuleException sont gérées par ApiExceptionSubscriber
+        $result = $this->couponService->applyToCart($cart, $code, $site, $user);
 
-        // Appliquer le coupon
-        try {
-            $result = $this->couponService->applyToCart($cart, $code, $site, $user);
-
-            return $this->json([
+        // ✅ Réponse standardisée
+        return $this->apiResponseUtils->success(
+            data: [
                 'cart' => [
                     'id' => $cart->getId(),
                     'summary' => $cart->getSummary(),
                     'coupon' => $result['cart']->getCoupon()?->getSummary()
                 ],
                 'discount' => $result['discount'],
-                'message' => $result['message']
-            ], Response::HTTP_OK);
-        } catch (\Exception $e) {
-            return $this->handleBusinessException($e);
-        }
+            ],
+            messageKey: 'coupon.applied',
+            status: Response::HTTP_OK
+        );
     }
 
     // ===============================================
@@ -154,7 +171,7 @@ class CouponController extends AbstractApiController
     /**
      * Valide un code promo sans l'appliquer.
      * 
-     * POST /api/cart/coupon/validate
+     * POST /carts/coupons/validate
      * 
      * Utilité : Vérifier si un coupon est valide avant de l'appliquer
      * (affichage en temps réel pendant saisie du code).
@@ -209,18 +226,36 @@ class CouponController extends AbstractApiController
     /**
      * Récupère le Site depuis le header X-Site-Id.
      */
-    private function getSiteFromHeaders(Request $request)
+    private function getSiteFromHeaders(Request $request): Site
     {
-        $siteId = $request->headers->get('X-Site-Id');
+        // Option 1 : Depuis le domaine (recommandé en production)
+        // $domain = $request->getHost();
+        // return $this->siteRepository->findByDomain($domain);
 
-        if (!$siteId) {
-            throw new \Exception('Header X-Site-Id requis.', Response::HTTP_BAD_REQUEST);
-        }
+        // Option 2 : Depuis un header custom
+        // $siteId = $request->headers->get('X-Site-Id');
 
-        $site = $this->siteRepository->find((int) $siteId);
+        // if (!$siteId) {
+        //     throw new \Exception('Header X-Site-Id requis.', 400);
+        // }
+
+        // // Injecter SiteRepository
+        // $site = $this->siteRepository->find($siteId);
+
+        // if (!$site) {
+        //     throw new \Exception('Site non trouvé.', 404);
+        // }
+
+        // return $site;
+
+        // Option 3 : Depuis query param (temporaire développement)
+        $siteCode = $request->query->get('site', 'FR');
+        $site = $this->siteRepository->findByCode($siteCode);
 
         if (!$site) {
-            throw new \Exception('Site non trouvé.', Response::HTTP_NOT_FOUND);
+            // Fallback : premier site actif
+            $sites = $this->siteRepository->findAccessibleSites();
+            $site = $sites[0] ?? throw new \RuntimeException('Aucun site disponible.');
         }
 
         return $site;

@@ -17,19 +17,19 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * Contrôleur REST pour la gestion des wishlists.
  * 
  * Endpoints :
- * - GET    /wishlist              : Liste mes wishlists
- * - GET    /wishlist/{id}         : Détails wishlist
- * - POST   /wishlist              : Créer wishlist
- * - DELETE /wishlist/{id}         : Supprimer wishlist
- * - POST   /wishlist/{id}/items   : Ajouter produit
- * - DELETE /wishlist/{id}/items/{itemId} : Supprimer produit
- * - PATCH  /wishlist/{id}/items/{itemId} : Modifier item
- * - POST   /wishlist/{id}/convert : Convertir en panier
- * - POST   /wishlist/{id}/share   : Activer partage
- * - DELETE /wishlist/{id}/share   : Désactiver partage
- * - GET    /wishlist/shared/{token} : Voir wishlist partagée (public)
+ * - GET    /wishlists              : Liste mes wishlists
+ * - GET    /wishlists/{id}         : Détails wishlist
+ * - POST   /wishlists              : Créer wishlist
+ * - DELETE /wishlists/{id}         : Supprimer wishlist
+ * - POST   /wishlists/{id}/items   : Ajouter produit
+ * - DELETE /wishlists/{id}/items/{itemId} : Supprimer produit
+ * - PATCH  /wishlists/{id}/items/{itemId} : Modifier item
+ * - POST   /wishlists/{id}/convert : Convertir en panier
+ * - POST   /wishlists/{id}/share   : Activer partage
+ * - DELETE /wishlists/{id}/share   : Désactiver partage
+ * - GET    /wishlists/shared/{token} : Voir wishlist partagée (public)
  */
-#[Route('/api/wishlist', name: 'api_wishlist_')]
+#[Route('/wishlists', name: 'api_wishlist_')]
 #[IsGranted('ROLE_USER')]
 class WishlistController extends AbstractApiController
 {
@@ -45,7 +45,7 @@ class WishlistController extends AbstractApiController
     /**
      * Récupère toutes mes wishlists.
      * 
-     * GET /api/wishlist
+     * GET /wishlists
      * 
      * Réponse 200 :
      * {

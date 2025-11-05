@@ -15,6 +15,7 @@ use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Annotation\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
+use Symfony\Component\Serializer\Annotation\Ignore;
 
 /**
  * Code promo / Coupon de réduction.
@@ -557,6 +558,8 @@ class Coupon
             'code' => $this->code,
             'type' => $this->type,
             'description' => $this->getDescription(),
+            'max_usages_par_user' => $this->getMaxUsagesPerUser(),
+            'public_message' => $this->getPublicMessage(),
             'is_valid' => $this->isValid(),
             'is_expired' => $this->isExpired(),
             'is_exhausted' => $this->isExhausted(),
