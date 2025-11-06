@@ -105,10 +105,9 @@ class WishlistFixtures extends Fixture implements DependentFixtureInterface
                 $reference = self::WISHLIST_REFERENCE_PREFIX . $wishlistCount;
                 $this->addReference($reference, $wishlist);
 
-                // Référence spéciale pour le premier utilisateur (pour tests)
-                if ($userKey === 'user_1' && $isFirstWishlist) {
-                    $this->addReference(self::WISHLIST_DEFAULT_USER_1, $wishlist);
-                }
+                $reference = sprintf('%s%s_%d', self::WISHLIST_REFERENCE_PREFIX, $userKey, $i + 1);
+
+                $this->addReference($reference, $wishlist);
             }
         }
 
