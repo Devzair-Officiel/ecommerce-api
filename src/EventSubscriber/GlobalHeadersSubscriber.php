@@ -45,9 +45,9 @@ class GlobalHeadersSubscriber implements EventSubscriberInterface
         $response->headers->set('X-XSS-Protection', '1; mode=block');
 
         // En-têtes CORS
-        $response->headers->set('Access-Control-Allow-Origin', '*'); // CHNAGER EN PROD POUR RESTREINDRE L'AUTORISATION ORIGIN 
-        $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
-        $response->headers->set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+        // $response->headers->set('Access-Control-Allow-Origin', 'http://localhost:3000'); // CHNAGER EN PROD POUR RESTREINDRE L'AUTORISATION ORIGIN 
+        // $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+        // $response->headers->set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
 
     }
 }
