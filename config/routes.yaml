@@ -8,7 +8,7 @@ controllers:
 api_login_check:
     path: /api/v1/login_check
 
-refresh_token:
-    path: /api/v1/token/refresh
-    controller: App\Controller\User\RefreshTokenController::refresh
-    methods: [POST]
+api_auth_logout:
+  path: /api/v1/auth/logout
+  controller: App\Controller\User\AuthController::logout
+  methods: [POST]

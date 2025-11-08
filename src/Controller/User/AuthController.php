@@ -4,20 +4,23 @@ declare(strict_types=1);
 
 namespace App\Controller\User;
 
-use App\Controller\Core\AbstractApiController;
 use App\Entity\Site\Site;
+use App\Entity\User\User;
+use App\Utils\ApiResponseUtils;
+use App\Entity\User\RefreshToken;
+use App\Service\User\UserService;
 use App\Exception\ConflictException;
 use App\Exception\ValidationException;
 use App\Repository\Site\SiteRepository;
-use App\Service\User\UserService;
-use App\Utils\ApiResponseUtils;
-use Symfony\Component\HttpFoundation\JsonResponse;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\Request;
+use App\Controller\Core\AbstractApiController;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Http\Attribute\CurrentUser;
-use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Serializer\SerializerInterface;
-use App\Entity\User\User;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
 /**
  * Contrôleur d'authentification (endpoints publics).
@@ -38,7 +41,8 @@ class AuthController extends AbstractApiController
         ApiResponseUtils $apiResponseUtils,
         SerializerInterface $serializer,
         private readonly UserService $userService,
-        private readonly SiteRepository $siteRepository
+        private readonly SiteRepository $siteRepository,
+        private EntityManagerInterface $em,
     ) {
         parent::__construct($apiResponseUtils, $serializer);
     }
@@ -390,6 +394,60 @@ class AuthController extends AbstractApiController
         } catch (\InvalidArgumentException $e) {
             return $this->missingFieldError($e->getMessage());
         }
+    }
+
+
+    // Deconnexion
+    #[Route('/api/v1/auth/logout', name: 'api_auth_logout', methods: ['POST'])]
+    public function logout(Request $request): JsonResponse
+    {
+        // 1) Récupérer le refresh depuis le cookie
+        $refresh = (string) $request->cookies->get('refresh_token', '');
+
+        if ($refresh !== '') {
+            // 2) Supprimer le refresh courant
+            $repo = $this->em->getRepository(RefreshToken::class);
+            $entity = $repo->findOneBy(['refreshToken' => $refresh]);
+            if ($entity) {
+                $this->em->remove($entity);
+                $this->em->flush();
+            }
+
+            // (Optionnel) Révoquer tous les refresh de l'utilisateur connecté
+            // si tu veux un "logout from all devices".
+            // $username = $entity?->getUsername();
+            // if ($username) {
+            //     foreach ($repo->findBy(['username' => $username]) as $rt) {
+            //         $this->em->remove($rt);
+            //     }
+            //     $this->em->flush();
+            // }
+        }
+
+        // 3) Effacer les cookies côté client
+        $resp = new JsonResponse(null, 204);
+
+        $resp->headers->setCookie(
+            Cookie::create('token')
+                ->withValue('')
+                ->withPath('/')
+                ->withExpires(1)         // expire dans le passé
+                ->withHttpOnly(true)
+                ->withSecure(false)      // PROD: true
+                ->withSameSite('lax')
+        );
+
+        $resp->headers->setCookie(
+            Cookie::create('refresh_token')
+                ->withValue('')
+                ->withPath('/')
+                ->withExpires(1)
+                ->withHttpOnly(true)
+                ->withSecure(false)      // PROD: true
+                ->withSameSite('lax')
+        );
+
+        return $resp;
     }
 
     // ===============================================
